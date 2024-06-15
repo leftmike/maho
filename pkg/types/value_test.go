@@ -78,13 +78,13 @@ func TestValueType(t *testing.T) {
 	for _, c := range cases {
 		s, p := valueTypeString(c.vt)
 		if s != c.s {
-			t.Errorf("%#v (%T) got %s want %s", c.vt, c.vt, s, c.s)
+			t.Errorf("%#v.String() got %s want %s", c.vt, s, c.s)
 		}
 		if p != c.p {
 			if c.p {
-				t.Errorf("%#v (%T) did not panic", c.vt, c.vt)
+				t.Errorf("%#v.String() did not panic", c.vt)
 			} else {
-				t.Errorf("%#v (%T) panicked", c.vt, c.vt)
+				t.Errorf("%#v.String() panicked", c.vt)
 			}
 		}
 	}

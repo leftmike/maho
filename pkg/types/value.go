@@ -12,16 +12,18 @@ type Value interface {
 type ValueType int
 
 const (
-	BooleanType ValueType = iota
+	UnknownType ValueType = iota // XXX: Is this needed?
+	BooleanType
 	StringType
 	BytesType
 	FloatType
 	IntegerType
-	UnknownType // XXX: Is this needed?
 )
 
 func (vt ValueType) String() string {
 	switch vt {
+	case UnknownType:
+		return "UNKNOWN"
 	case BooleanType:
 		return "BOOL"
 	case StringType:
@@ -32,8 +34,6 @@ func (vt ValueType) String() string {
 		return "DOUBLE"
 	case IntegerType:
 		return "INT"
-	case UnknownType:
-		return "UNKNOWN"
 	default:
 		panic(fmt.Sprintf("unexpected datatype; got %#v", vt))
 	}
