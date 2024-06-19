@@ -36,20 +36,13 @@ func (eng *engine) ListDatabases() ([]types.Identifier, error) {
 }
 
 /*
-type TableType struct {
-	Version     uint32
-	ColumnNames []types.Identifier
-	ColumnIds   []types.ColumnId
-	ColumnTypes []types.ColumnType
-}
-
 	CreateSchema(ctx context.Context, sn types.SchemaName) error
 	DropSchema(ctx context.Context, ifExists bool, sn types.SchemaName) error
 	ListSchemas(ctx context.Context, dbn types.Identifier) ([]types.Identifier, error)
 
 	LookupTable(ctx context.Context, tn types.TableName) (Table, error)
 	CreateTable(ctx context.Context, tn types.TableName, colNames []types.Identifier,
-		colIds []types.ColumnId, colTypes []types.ColumnType) error
+		colTypes []types.ColumnType) error
 	DropTable(ctx context.Context, tn types.TableName) error
 	ListTables(ctx context.Context, sn types.SchemaName) ([]types.Identifier, error)
 */

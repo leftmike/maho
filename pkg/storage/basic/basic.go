@@ -43,10 +43,10 @@ func (btx *transaction) OpenTable(ctx context.Context, tid storage.TableId) (sto
 }
 
 func (btx *transaction) CreateTable(ctx context.Context, tid storage.TableId,
-	colTypes []types.ColumnType) ([]types.ColumnId, error) {
+	colNames []types.Identifier, colTypes []types.ColumnType) error {
 
 	// XXX
-	return nil, nil
+	return nil
 }
 
 func (btx *transaction) DropTable(ctx context.Context, tid storage.TableId) error {
@@ -68,14 +68,14 @@ func (btx *transaction) NextStmt() {
 	// XXX
 }
 
-func (bt *table) Rows(ctx context.Context, cols []types.ColumnId, minRow, maxRow []types.Value,
+func (bt *table) Rows(ctx context.Context, cols []types.ColumnNum, minRow, maxRow []types.Value,
 	pred storage.PredicateFn) (storage.Rows, error) {
 
 	// XXX
 	return &rows{}, nil
 }
 
-func (bt *table) Update(ctx context.Context, rid storage.RowId, cols []types.ColumnId,
+func (bt *table) Update(ctx context.Context, rid storage.RowId, cols []types.ColumnNum,
 	vals []types.Value) error {
 
 	// XXX

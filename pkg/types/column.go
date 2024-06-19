@@ -5,7 +5,8 @@ import (
 	"math"
 )
 
-type ColumnId uint32
+type ColumnNum uint32
+type ColumnKey int32
 
 const (
 	MaxColumnSize = math.MaxUint32 - 1
@@ -77,4 +78,23 @@ func (ct ColumnType) String() string {
 	default:
 		panic(fmt.Sprintf("unexpected column type: %#v %d", ct, ct.Type))
 	}
+}
+
+func MakeColumnKey(num ColumnNum, reverse bool) ColumnKey {
+	num += 1
+	if reverse {
+		return -ColumnKey(num)
+	}
+	return ColumnKey(num)
+}
+
+func (ck ColumnKey) Reverse() bool {
+	return ck < 0
+}
+
+func (ck ColumnKey) Column() ColumnNum {
+	if ck < 0 {
+		ck = -ck
+	}
+	return ColumnNum(ck - 1)
 }
