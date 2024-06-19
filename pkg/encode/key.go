@@ -47,7 +47,7 @@ func encodeKeyBytes(buf []byte, bytes []byte, reverse bool) []byte {
 	return buf
 }
 
-func MakeKey(key []types.ColumnKey, row []types.Value) []byte {
+func MakeKey(key []types.ColumnKey, row types.Row) []byte {
 	var buf []byte
 
 	for _, ck := range key {

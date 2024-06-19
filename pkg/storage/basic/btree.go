@@ -2,6 +2,7 @@ package basic
 
 import (
 	"bytes"
+	"fmt"
 
 	"github.com/google/btree"
 
@@ -13,24 +14,32 @@ import (
 type item struct {
 	rid uint64
 	key []byte
-	row []types.Value
+	row types.Row
 }
 
 func lessItems(it1, it2 item) bool {
 	if it1.rid < it2.rid {
 		return true
 	}
+	fmt.Println("less:", it1, it2)
 	return it1.rid == it2.rid && bytes.Compare(it1.key, it2.key) < 0
 }
 
 func toItem(tid storage.TableId, iid storage.IndexId, rowKey []types.ColumnKey,
-	row []types.Value) item {
+	row types.Row) item {
 
-	return item{
+	it := item{
 		rid: uint64(tid)<<32 | uint64(iid),
-		key: encode.MakeKey(rowKey, row),
 		row: row,
 	}
+	if row != nil {
+		it.key = encode.MakeKey(rowKey, row)
+	}
+	return it
+}
+
+func (it item) String() string {
+	return fmt.Sprintf("%d:%d %v %s", it.rid>>32, it.rid&0xFFFFFFFF, it.key, it.row)
 }
 
 func newBTree() *btree.BTreeG[item] {

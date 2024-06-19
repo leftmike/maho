@@ -9,6 +9,8 @@ type Value interface {
 	String() string
 }
 
+type Row []Value
+
 type ValueType int
 
 const (
@@ -91,4 +93,17 @@ func FormatValue(v Value) string {
 	}
 
 	return v.String()
+}
+
+func (r Row) String() string {
+	var buf bytes.Buffer
+	buf.WriteRune('[')
+	for idx, val := range r {
+		if idx > 0 {
+			buf.WriteString(", ")
+		}
+		buf.WriteString(FormatValue(val))
+	}
+	buf.WriteRune(']')
+	return buf.String()
 }

@@ -9,8 +9,8 @@ import (
 	"github.com/leftmike/maho/pkg/types"
 )
 
-func testMakeKey(t *testing.T, key []types.ColumnKey, values []types.Value,
-	makeRow func(val types.Value) []types.Value) {
+func testMakeKey(t *testing.T, key []types.ColumnKey, values types.Row,
+	makeRow func(val types.Value) types.Row) {
 
 	var prev []byte
 	for _, val := range values {
@@ -24,7 +24,7 @@ func testMakeKey(t *testing.T, key []types.ColumnKey, values []types.Value,
 }
 
 func TestMakeKey(t *testing.T) {
-	values := []types.Value{
+	values := types.Row{
 		nil,
 		types.BoolValue(false),
 		types.BoolValue(true),
@@ -60,7 +60,7 @@ func TestMakeKey(t *testing.T) {
 		types.BytesValue([]byte{255}),
 	}
 
-	reverseValues := []types.Value{
+	reverseValues := types.Row{
 		nil,
 		types.BoolValue(true),
 		types.BoolValue(false),
@@ -97,8 +97,8 @@ func TestMakeKey(t *testing.T) {
 	}
 
 	testMakeKey(t, []types.ColumnKey{types.MakeColumnKey(0, false)}, values,
-		func(val types.Value) []types.Value {
-			return []types.Value{val}
+		func(val types.Value) types.Row {
+			return types.Row{val}
 		})
 
 	for _, val0 := range values {
@@ -106,14 +106,14 @@ func TestMakeKey(t *testing.T) {
 			types.MakeColumnKey(1, false),
 			types.MakeColumnKey(0, false),
 		}, values,
-			func(val1 types.Value) []types.Value {
-				return []types.Value{val0, val1}
+			func(val1 types.Value) types.Row {
+				return types.Row{val0, val1}
 			})
 	}
 
 	testMakeKey(t, []types.ColumnKey{types.MakeColumnKey(0, true)}, reverseValues,
-		func(val types.Value) []types.Value {
-			return []types.Value{val}
+		func(val types.Value) types.Row {
+			return types.Row{val}
 		})
 
 	for _, val0 := range reverseValues {
@@ -121,8 +121,8 @@ func TestMakeKey(t *testing.T) {
 			types.MakeColumnKey(1, false),
 			types.MakeColumnKey(0, true),
 		}, values,
-			func(val1 types.Value) []types.Value {
-				return []types.Value{val0, val1}
+			func(val1 types.Value) types.Row {
+				return types.Row{val0, val1}
 			})
 	}
 
@@ -131,8 +131,8 @@ func TestMakeKey(t *testing.T) {
 			types.MakeColumnKey(0, false),
 			types.MakeColumnKey(1, true),
 		}, reverseValues,
-			func(val1 types.Value) []types.Value {
-				return []types.Value{val0, val1}
+			func(val1 types.Value) types.Row {
+				return types.Row{val0, val1}
 			})
 	}
 }

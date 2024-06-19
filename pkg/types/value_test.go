@@ -89,3 +89,41 @@ func TestValueType(t *testing.T) {
 		}
 	}
 }
+
+func TestRow(t *testing.T) {
+	cases := []struct {
+		r types.Row
+		s string
+	}{
+		{
+			r: types.Row{types.BoolValue(true), types.Int64Value(123), types.Float64Value(0.0)},
+			s: "[true, 123, 0]",
+		},
+		{types.Row{}, "[]"},
+		{nil, "[]"},
+		{types.Row{types.BoolValue(false)}, "[false]"},
+		{
+			r: types.Row{
+				types.Int64Value(0xFF),
+				types.Int64Value(-123),
+				types.Float64Value(1.234),
+				types.StringValue("abcdef"),
+			},
+			s: "[255, -123, 1.234, 'abcdef']",
+		},
+		{
+			r: types.Row{types.StringValue(""),
+				types.BytesValue(bytes.Repeat([]byte{0x12, 0xef}, 3)),
+				types.BytesValue([]byte{}),
+			},
+			s: `['', '\x12ef12ef12ef', '\x']`,
+		},
+	}
+
+	for _, c := range cases {
+		s := c.r.String()
+		if s != c.s {
+			t.Errorf("%#v (%T) got %s want %s", c.r, c.r, s, c.s)
+		}
+	}
+}
