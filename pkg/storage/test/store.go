@@ -65,18 +65,24 @@ func TestCreateTable(t *testing.T, store string, newStore NewStore) {
 		},
 		{
 			tid:      storage.EngineTableId + 2,
-			name:     types.TableName{db, scm, types.ID("table1", false)},
+			name:     types.TableName{db, scm, types.ID("table2", false)},
 			colNames: []types.Identifier{col1, col2, col3},
 			colTypes: []types.ColumnType{types.IdColType, types.Int32ColType},
 			panicked: true,
 		},
 		{
-			tid:      storage.EngineTableId + 1,
-			name:     types.TableName{db, scm, types.ID("table1", false)},
+			tid:      storage.EngineTableId + 3,
+			name:     types.TableName{db, scm, types.ID("table3", false)},
 			colNames: []types.Identifier{col1, col2, col3},
 			colTypes: []types.ColumnType{types.IdColType, types.Int32ColType, types.StringColType},
 			primary:  []types.ColumnKey{types.MakeColumnKey(3, false)},
 			panicked: true,
+		},
+		{
+			tid:      storage.EngineTableId + 4,
+			name:     types.TableName{db, scm, types.ID("table4", false)},
+			colNames: []types.Identifier{col1, col2, col3},
+			colTypes: []types.ColumnType{types.IdColType, types.Int32ColType, types.StringColType},
 		},
 	}
 
@@ -118,18 +124,30 @@ func TestCreateTable(t *testing.T, store string, newStore NewStore) {
 			t.Errorf("%d.Name() got %s want %s", c.tid, name, c.name)
 		}
 
-		// XXX: if c.primary == nil, adjust cn and ct to skip 0 columns
 		cn := tbl.ColumnNames()
+		ct := tbl.ColumnTypes()
+		if c.primary == nil {
+			for {
+				if len(cn) == 0 || cn[0] != 0 {
+					break
+				}
+
+				cn = cn[1:]
+				ct = ct[1:]
+			}
+		}
+
 		if !reflect.DeepEqual(cn, c.colNames) {
 			t.Errorf("%d.ColumnNames() got %#v want %#v", c.tid, cn, c.colNames)
 		}
-		ct := tbl.ColumnTypes()
 		if !reflect.DeepEqual(ct, c.colTypes) {
 			t.Errorf("%d.ColumnTypes() got %#v want %#v", c.tid, ct, c.colTypes)
 		}
-		p := tbl.Primary()
-		if !reflect.DeepEqual(p, c.primary) {
-			t.Errorf("%d.Primary() got %#v want %#v", c.tid, p, c.primary)
+		if c.primary != nil {
+			p := tbl.Primary()
+			if !reflect.DeepEqual(p, c.primary) {
+				t.Errorf("%d.Primary() got %#v want %#v", c.tid, p, c.primary)
+			}
 		}
 	}
 }
