@@ -21,7 +21,6 @@ func lessItems(it1, it2 item) bool {
 	if it1.rid < it2.rid {
 		return true
 	}
-	fmt.Println("less:", it1, it2)
 	return it1.rid == it2.rid && bytes.Compare(it1.key, it2.key) < 0
 }
 

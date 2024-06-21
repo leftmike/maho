@@ -18,13 +18,12 @@ type IndexId uint32
 
 const (
 	EngineTableId TableId = 16
-	UserTableId   TableId = 256
 )
 
 type Transaction interface {
 	OpenTable(ctx context.Context, tid TableId) (Table, error)
-	CreateTable(ctx context.Context, tid TableId, colNames []types.Identifier,
-		colTypes []types.ColumnType) error
+	CreateTable(ctx context.Context, tid TableId, tn types.TableName,
+		colNames []types.Identifier, colTypes []types.ColumnType, primary []types.ColumnKey) error
 	DropTable(ctx context.Context, tid TableId) error
 
 	Commit(ctx context.Context) error
@@ -36,11 +35,11 @@ type PredicateFn func(row types.Row) (bool, error)
 type RowId interface{}
 
 type Table interface {
-	// XXX: Version() uint32
-	// XXX: Name() types.Identifier
-	// XXX: ColumnNames() []types.Identifier
-	// XXX: ColumnTypes() []types.ColumnType
-	// XXX: PrimaryKey() []types.ColumnKey
+	Version() uint32
+	Name() types.TableName
+	ColumnNames() []types.Identifier
+	ColumnTypes() []types.ColumnType
+	Primary() []types.ColumnKey
 
 	// XXX: AddColumn, DropColumn, UpdateColumn
 	// XXX: AddIndex, RemoveIndex

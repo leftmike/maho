@@ -24,11 +24,12 @@ type transaction struct {
 }
 
 type tableType struct {
-	Version uint32
-	// Name string
+	Version     uint32
+	Name        types.TableName
 	ColumnNames []types.Identifier
 	ColumnTypes []types.ColumnType
-	// PrimaryKey []types.ColumnKey
+	Primary     []types.ColumnKey
+	HasPrimary  bool
 }
 
 type table struct {
@@ -110,22 +111,40 @@ func (tx *transaction) OpenTable(ctx context.Context, tid storage.TableId) (stor
 	}, nil
 }
 
-// XXX: add optional primary key
-func (tx *transaction) CreateTable(ctx context.Context, tid storage.TableId,
-	colNames []types.Identifier, colTypes []types.ColumnType) error {
+func (tx *transaction) CreateTable(ctx context.Context, tid storage.TableId, tn types.TableName,
+	colNames []types.Identifier, colTypes []types.ColumnType, primary []types.ColumnKey) error {
 
-	if tx.getTableType(tid) != nil {
+	if tid < storage.EngineTableId {
+		panic(fmt.Sprintf("basic: tid too small: %d", tid))
+	} else if tx.getTableType(tid) != nil {
 		panic(fmt.Sprintf("basic: table already exists: %d", tid))
+	} else if len(colNames) != len(colTypes) {
+		panic(fmt.Sprintf("basic: column names doesn't match types: %#v %#v", colNames, colTypes))
 	}
 
-	// XXX: if no primary key, add a unique column and use that for the primary key
+	hasPrimary := primary != nil
+	if primary == nil {
+		colNames = append(append(make([]types.Identifier, 0, len(colNames)+1), 0), colNames...)
+		colTypes = append(append(make([]types.ColumnType, 0, len(colTypes)+1),
+			types.Int64ColType), colTypes...)
+		primary = []types.ColumnKey{types.MakeColumnKey(0, false)}
+	} else {
+		for _, ck := range primary {
+			if int(ck.Column()) >= len(colNames) {
+				panic(fmt.Sprintf("basic: primary key out of range: %d: %#v", ck.Column(),
+					colNames))
+			}
+		}
+	}
+
 	tx.forWrite()
 	tx.setTableType(tid, &tableType{
 		Version:     1,
+		Name:        tn,
 		ColumnNames: colNames,
 		ColumnTypes: colTypes,
-		// PrimaryKey: pkey,
-		// HasPrimaryKey:
+		Primary:     primary,
+		HasPrimary:  hasPrimary,
 	})
 	return nil
 }
@@ -166,6 +185,26 @@ func (tx *transaction) forWrite() {
 	if tx.tree == tx.st.tree {
 		tx.tree = tx.st.tree.Clone()
 	}
+}
+
+func (tbl *table) Version() uint32 {
+	return tbl.tt.Version
+}
+
+func (tbl *table) Name() types.TableName {
+	return tbl.tt.Name
+}
+
+func (tbl *table) ColumnNames() []types.Identifier {
+	return tbl.tt.ColumnNames
+}
+
+func (tbl *table) ColumnTypes() []types.ColumnType {
+	return tbl.tt.ColumnTypes
+}
+
+func (tbl *table) Primary() []types.ColumnKey {
+	return tbl.tt.Primary
 }
 
 func (tbl *table) Rows(ctx context.Context, cols []types.ColumnNum, minRow, maxRow types.Row,

@@ -9,7 +9,10 @@ import (
 )
 
 func TestStore(t *testing.T) {
-	test.StoreTest(t, "basic", func(dataDir string) (storage.Store, error) {
+	newStore := func(dataDir string) (storage.Store, error) {
 		return basic.NewStore(dataDir)
-	})
+	}
+
+	test.TestStore(t, "basic", newStore)
+	test.TestCreateTable(t, "basic", newStore)
 }
