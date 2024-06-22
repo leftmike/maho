@@ -13,6 +13,10 @@ import (
 	"github.com/leftmike/maho/pkg/types"
 )
 
+const (
+	primaryIndexId = 0
+)
+
 type store struct {
 	mutex sync.Mutex
 	tree  *btree.BTreeG[item]
@@ -33,11 +37,14 @@ type tableType struct {
 }
 
 type table struct {
-	tx *transaction
-	tt *tableType
+	tx  *transaction
+	tid storage.TableId
+	tt  *tableType
 }
 
 type rows struct {
+	cols  []types.ColumnNum
+	items []item
 }
 
 func NewStore(dataDir string) (storage.Store, error) {
@@ -59,13 +66,12 @@ func (st *store) Begin() storage.Transaction {
 }
 
 var (
-	tableTypesTID storage.TableId = 0
-	tableTypesIID storage.IndexId = 0
+	tableTypesRelation relationId = toRelationId(0, 0)
 	tableTypesKey                 = []types.ColumnKey{types.MakeColumnKey(0, false)}
 )
 
 func (tx *transaction) getTableType(tid storage.TableId) *tableType {
-	it := toItem(tableTypesTID, tableTypesIID, tableTypesKey, types.Row{types.Int64Value(tid)})
+	it := toItem(tableTypesRelation, tableTypesKey, types.Row{types.Int64Value(tid)})
 	it, ok := tx.tree.Get(it)
 	if !ok {
 		return nil
@@ -92,13 +98,13 @@ func (tx *transaction) setTableType(tid storage.TableId, tt *tableType) {
 		panic(fmt.Sprintf("basic: unable able encode type table: %s", err))
 	}
 
-	it := toItem(tableTypesTID, tableTypesIID, tableTypesKey,
+	it := toItem(tableTypesRelation, tableTypesKey,
 		types.Row{types.Int64Value(tid), types.BytesValue(buf.Bytes())})
 	tx.tree.ReplaceOrInsert(it)
 }
 
 func (tx *transaction) deleteTableType(tid storage.TableId) bool {
-	it := toItem(tableTypesTID, tableTypesIID, tableTypesKey, types.Row{types.Int64Value(tid)})
+	it := toItem(tableTypesRelation, tableTypesKey, types.Row{types.Int64Value(tid)})
 	_, ok := tx.tree.Delete(it)
 	return ok
 }
@@ -112,8 +118,9 @@ func (tx *transaction) OpenTable(ctx context.Context, tid storage.TableId) (stor
 	}
 
 	return &table{
-		tx: tx,
-		tt: tt,
+		tx:  tx,
+		tid: tid,
+		tt:  tt,
 	}, nil
 }
 
@@ -225,8 +232,33 @@ func (tbl *table) Primary() []types.ColumnKey {
 func (tbl *table) Rows(ctx context.Context, cols []types.ColumnNum, minRow, maxRow types.Row,
 	pred storage.Predicate) (storage.Rows, error) {
 
-	// XXX
-	return &rows{}, nil
+	rel := toRelationId(tbl.tid, primaryIndexId)
+
+	var maxItem item
+	if maxRow != nil {
+		maxItem = toItem(rel, tbl.tt.Primary, maxRow)
+	}
+
+	var items []item
+	tbl.tx.tree.AscendGreaterOrEqual(toItem(rel, tbl.tt.Primary, minRow),
+		func(it item) bool {
+			if it.rel != rel {
+				return false
+			}
+			if maxRow != nil && lessItems(maxItem, it) {
+				return false
+			}
+
+			// XXX: pred
+
+			items = append(items, it)
+			return true
+		})
+
+	return &rows{
+		cols:  cols,
+		items: items,
+	}, nil
 }
 
 func (tbl *table) Update(ctx context.Context, rid storage.RowId, cols []types.ColumnNum,
@@ -242,7 +274,23 @@ func (tbl *table) Delete(ctx context.Context, rid storage.RowId) error {
 }
 
 func (tbl *table) Insert(ctx context.Context, rows []types.Row) error {
-	// XXX
+	tbl.tx.forWrite()
+
+	for _, row := range rows {
+		row, err := types.ConvertRow(tbl.tt.ColumnTypes, row)
+		if err != nil {
+			return err
+		}
+
+		it := toItem(toRelationId(tbl.tid, primaryIndexId), tbl.tt.Primary, row)
+		if tbl.tx.tree.Has(it) {
+			return fmt.Errorf("basic: %s: primary index: existing row with duplicate key:",
+				tbl.tt.Name)
+		}
+
+		tbl.tx.tree.ReplaceOrInsert(it)
+	}
+
 	return nil
 }
 

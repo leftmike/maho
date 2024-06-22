@@ -11,24 +11,29 @@ import (
 	"github.com/leftmike/maho/pkg/types"
 )
 
+type relationId uint64
 type item struct {
-	rid uint64
+	rel relationId
 	key []byte
 	row types.Row
 }
 
 func lessItems(it1, it2 item) bool {
-	if it1.rid < it2.rid {
+	if it1.rel < it2.rel {
 		return true
 	}
-	return it1.rid == it2.rid && bytes.Compare(it1.key, it2.key) < 0
+	return it1.rel == it2.rel && bytes.Compare(it1.key, it2.key) < 0
 }
 
-func toItem(tid storage.TableId, iid storage.IndexId, rowKey []types.ColumnKey,
+func toRelationId(tid storage.TableId, iid storage.IndexId) relationId {
+	return relationId(uint64(tid)<<32 | uint64(iid))
+}
+
+func toItem(rel relationId, rowKey []types.ColumnKey,
 	row types.Row) item {
 
 	it := item{
-		rid: uint64(tid)<<32 | uint64(iid),
+		rel: rel,
 		row: row,
 	}
 	if row != nil {
@@ -38,7 +43,7 @@ func toItem(tid storage.TableId, iid storage.IndexId, rowKey []types.ColumnKey,
 }
 
 func (it item) String() string {
-	return fmt.Sprintf("%d:%d %v %s", it.rid>>32, it.rid&0xFFFFFFFF, it.key, it.row)
+	return fmt.Sprintf("%d:%d %v %s", it.rel>>32, it.rel&0xFFFFFFFF, it.key, it.row)
 }
 
 func newBTree() *btree.BTreeG[item] {

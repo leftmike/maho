@@ -2,7 +2,12 @@ package types
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
+	"math"
+	"strconv"
+	"strings"
+	"unicode/utf8"
 )
 
 type Value interface {
@@ -107,3 +112,158 @@ func (r Row) String() string {
 	buf.WriteRune(']')
 	return buf.String()
 }
+
+var (
+	errNotNullValue = errors.New("expected a non-null value")
+)
+
+func ConvertValue(ct ColumnType, val Value) (Value, error) {
+	if val == nil {
+		if ct.NotNull {
+			return nil, errNotNullValue
+		}
+		return nil, nil
+	}
+
+	switch ct.Type {
+	case BoolType:
+		if sv, ok := val.(StringValue); ok {
+			s := strings.Trim(string(sv), " \t\n")
+			if s == "t" || s == "true" || s == "y" || s == "yes" || s == "on" || s == "1" {
+				return BoolValue(true), nil
+			} else if s == "f" || s == "false" || s == "n" || s == "no" || s == "off" || s == "0" {
+				return BoolValue(false), nil
+			} else {
+				return nil, fmt.Errorf("expected a boolean value: %v", val)
+			}
+		} else if _, ok := val.(BoolValue); !ok {
+			return nil, fmt.Errorf("expected a boolean value: %v", val)
+		}
+	case StringType:
+		var s StringValue
+		if i, ok := val.(Int64Value); ok {
+			s = StringValue(strconv.FormatInt(int64(i), 10))
+		} else if f, ok := val.(Float64Value); ok {
+			s = StringValue(strconv.FormatFloat(float64(f), 'g', -1, 64))
+		} else if b, ok := val.(BytesValue); ok {
+			if !utf8.Valid([]byte(b)) {
+				return nil, fmt.Errorf("expected a valid utf8 string: %v", val)
+			}
+			s = StringValue(b)
+		} else {
+			var ok bool
+			s, ok = val.(StringValue)
+			if !ok {
+				return nil, fmt.Errorf("expected a string value: %v", val)
+			}
+
+		}
+
+		if uint32(len(s)) > ct.Size {
+			return nil, fmt.Errorf("string value too long: %d; expected %d", len(s), ct.Size)
+		}
+		return s, nil
+	case BytesType:
+		var b BytesValue
+		if s, ok := val.(StringValue); ok {
+			b = BytesValue(s)
+		} else {
+			var ok bool
+			b, ok = val.(BytesValue)
+			if !ok {
+				return nil, fmt.Errorf("expected a bytes value: %v", val)
+			}
+		}
+
+		if uint32(len(b)) > ct.Size {
+			return nil, fmt.Errorf("bytes value too long: %d; expected %d", len(b), ct.Size)
+		}
+		return b, nil
+	case Float64Type:
+		if i, ok := val.(Int64Value); ok {
+			return Float64Value(i), nil
+		} else if s, ok := val.(StringValue); ok {
+			d, err := strconv.ParseFloat(strings.Trim(string(s), " \t\n"), 64)
+			if err != nil {
+				return nil, fmt.Errorf("expected a float: %v: %s", val, err)
+			}
+			return Float64Value(d), nil
+		} else if _, ok := val.(Float64Value); !ok {
+			return nil, fmt.Errorf("expected a float value: %v", val)
+		}
+	case Int64Type:
+		var i Int64Value
+		if f, ok := val.(Float64Value); ok {
+			i = Int64Value(f)
+		} else if s, ok := val.(StringValue); ok {
+			i64, err := strconv.ParseInt(strings.Trim(string(s), " \t\n"), 10, 64)
+			if err != nil {
+				return nil, fmt.Errorf("expected an integer: %v: %s", val, err)
+			}
+			i = Int64Value(i64)
+		} else {
+			var ok bool
+			i, ok = val.(Int64Value)
+			if !ok {
+				return nil, fmt.Errorf("expected an integer value: %v", val)
+			}
+		}
+
+		if ct.Size == 2 && (i > math.MaxInt16 || i < math.MinInt16) {
+			return nil, fmt.Errorf("expected a 16 bit integer value: %d", i)
+		} else if ct.Size == 4 && (i > math.MaxInt32 || i < math.MinInt32) {
+			return nil, fmt.Errorf("expected a 32 bit integer value: %d", i)
+		}
+		return i, nil
+	default:
+		panic(fmt.Sprintf("expected a valid data type; got %v", ct.Type))
+	}
+
+	return val, nil
+}
+
+func ConvertRow(colTypes []ColumnType, row Row) (Row, error) {
+	var nrow Row
+
+	for idx, val := range row {
+		nval, err := ConvertValue(colTypes[idx], val)
+		if err != nil {
+			return nil, err
+		}
+		if nval != val && nrow == nil {
+			nrow = append(make([]Value, 0, len(row)), row...)
+		} else if nrow == nil {
+			continue
+		}
+
+		nrow[idx] = nval
+	}
+
+	if nrow != nil {
+		return nrow, nil
+	}
+	return row, nil
+}
+
+/*
+database/sql package ==>
+Scan converts from columns to Go types:
+*string
+*[]byte
+*int, *int8, *int16, *int32, *int64
+*uint, *uint8, *uint16, *uint32, *uint64
+*bool
+*float32, *float64
+*interface{}
+*RawBytes
+any type implementing Scanner (see Scanner docs)
+
+database/sql/driver package ==>
+nil
+int64
+float64
+bool
+[]byte
+string
+time.Time
+*/
