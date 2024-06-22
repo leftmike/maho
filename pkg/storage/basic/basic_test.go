@@ -15,4 +15,5 @@ func TestStore(t *testing.T) {
 
 	test.TestStore(t, "basic", newStore)
 	test.TestCreateTable(t, "basic", newStore)
+	test.TestDropTable(t, "basic", newStore)
 }

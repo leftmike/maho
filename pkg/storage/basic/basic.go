@@ -160,6 +160,7 @@ func (tx *transaction) DropTable(ctx context.Context, tid storage.TableId) error
 		panic(fmt.Sprintf("basic: table not found: %d", tid))
 	}
 
+	tx.forWrite()
 	if !tx.deleteTableType(tid) {
 		panic(fmt.Sprintf("basic: unable to delete table type: %d", tid))
 	}

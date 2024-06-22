@@ -166,3 +166,83 @@ func TestCreateTable(t *testing.T, store string, newStore NewStore) {
 		Commit{},
 	})
 }
+
+func TestDropTable(t *testing.T, store string, newStore NewStore) {
+	t.Helper()
+
+	st, err := newStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("%s.NewStore() failed with %s", store, err)
+	}
+
+	col1 := types.ID("col1", false)
+	col2 := types.ID("col2", false)
+
+	colNames := []types.Identifier{col1, col2}
+	colTypes := []types.ColumnType{types.IdColType, types.Int32ColType}
+	primary := []types.ColumnKey{types.MakeColumnKey(0, false)}
+	testStorage(t, st.Begin(), nil, []interface{}{
+		DropTable{
+			tid:      storage.EngineTableId + 1,
+			panicked: true,
+		},
+		CreateTable{
+			tid:      storage.EngineTableId + 1,
+			colNames: colNames,
+			colTypes: colTypes,
+			primary:  primary,
+		},
+		OpenTable{
+			tid: storage.EngineTableId + 1,
+		},
+		CreateTable{
+			tid:      storage.EngineTableId + 2,
+			colNames: colNames,
+			colTypes: colTypes,
+			primary:  primary,
+		},
+		OpenTable{
+			tid: storage.EngineTableId + 2,
+		},
+		Commit{},
+	})
+
+	testStorage(t, st.Begin(), nil, []interface{}{
+		OpenTable{
+			tid: storage.EngineTableId + 1,
+		},
+		DropTable{
+			tid: storage.EngineTableId + 1,
+		},
+		OpenTable{
+			tid:      storage.EngineTableId + 1,
+			panicked: true,
+		},
+		Rollback{},
+	})
+
+	testStorage(t, st.Begin(), nil, []interface{}{
+		OpenTable{
+			tid: storage.EngineTableId + 1,
+		},
+		DropTable{
+			tid: storage.EngineTableId + 1,
+		},
+		OpenTable{
+			tid:      storage.EngineTableId + 1,
+			panicked: true,
+		},
+		Commit{},
+	})
+
+	testStorage(t, st.Begin(), nil, []interface{}{
+		OpenTable{
+			tid:      storage.EngineTableId + 1,
+			panicked: true,
+		},
+		OpenTable{
+			tid: storage.EngineTableId + 2,
+		},
+		Rollback{},
+	})
+}
