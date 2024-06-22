@@ -24,10 +24,10 @@ type ColumnType struct {
 
 var (
 	IdColType         = ColumnType{Type: StringType, Size: MaxIdentifier, NotNull: true}
-	Int32ColType      = ColumnType{Type: IntegerType, Size: 4, NotNull: true}
-	Int64ColType      = ColumnType{Type: IntegerType, Size: 8, NotNull: true}
-	NullInt64ColType  = ColumnType{Type: IntegerType, Size: 8}
-	BoolColType       = ColumnType{Type: BooleanType, NotNull: true}
+	Int32ColType      = ColumnType{Type: Int64Type, Size: 4, NotNull: true}
+	Int64ColType      = ColumnType{Type: Int64Type, Size: 8, NotNull: true}
+	NullInt64ColType  = ColumnType{Type: Int64Type, Size: 8}
+	BoolColType       = ColumnType{Type: BoolType, NotNull: true}
 	StringColType     = ColumnType{Type: StringType, Size: 4096, NotNull: true}
 	NullStringColType = ColumnType{Type: StringType, Size: 4096}
 )
@@ -36,7 +36,7 @@ func (ct ColumnType) String() string {
 	switch ct.Type {
 	case UnknownType:
 		return "UNKNOWN"
-	case BooleanType:
+	case BoolType:
 		return "BOOL"
 	case StringType:
 		if ct.Size == 0 {
@@ -62,9 +62,9 @@ func (ct ColumnType) String() string {
 		} else {
 			return fmt.Sprintf("VARBINARY(%d)", ct.Size)
 		}
-	case FloatType:
+	case Float64Type:
 		return "DOUBLE"
-	case IntegerType:
+	case Int64Type:
 		switch ct.Size {
 		case 2:
 			return "SMALLINT"

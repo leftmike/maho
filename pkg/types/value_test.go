@@ -66,11 +66,11 @@ func TestValueType(t *testing.T) {
 		s  string
 		p  bool
 	}{
-		{types.BooleanType, "BOOL", false},
+		{types.BoolType, "BOOL", false},
 		{types.StringType, "STRING", false},
 		{types.BytesType, "BYTES", false},
-		{types.FloatType, "DOUBLE", false},
-		{types.IntegerType, "INT", false},
+		{types.Float64Type, "DOUBLE", false},
+		{types.Int64Type, "INT", false},
 		{types.UnknownType, "UNKNOWN", false},
 		{types.ValueType(-1), "", true},
 	}

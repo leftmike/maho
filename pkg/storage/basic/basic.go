@@ -97,6 +97,12 @@ func (tx *transaction) setTableType(tid storage.TableId, tt *tableType) {
 	tx.tree.ReplaceOrInsert(it)
 }
 
+func (tx *transaction) deleteTableType(tid storage.TableId) bool {
+	it := toItem(tableTypesTID, tableTypesIID, tableTypesKey, types.Row{types.Int64Value(tid)})
+	_, ok := tx.tree.Delete(it)
+	return ok
+}
+
 func (tx *transaction) OpenTable(ctx context.Context, tid storage.TableId) (storage.Table,
 	error) {
 
@@ -150,7 +156,15 @@ func (tx *transaction) CreateTable(ctx context.Context, tid storage.TableId, tn 
 }
 
 func (tx *transaction) DropTable(ctx context.Context, tid storage.TableId) error {
-	// XXX
+	if tx.getTableType(tid) == nil {
+		panic(fmt.Sprintf("basic: table not found: %d", tid))
+	}
+
+	if !tx.deleteTableType(tid) {
+		panic(fmt.Sprintf("basic: unable to delete table type: %d", tid))
+	}
+
+	// XXX: delete all rows in the table
 	return nil
 }
 
@@ -208,7 +222,7 @@ func (tbl *table) Primary() []types.ColumnKey {
 }
 
 func (tbl *table) Rows(ctx context.Context, cols []types.ColumnNum, minRow, maxRow types.Row,
-	pred storage.PredicateFn) (storage.Rows, error) {
+	pred storage.Predicate) (storage.Rows, error) {
 
 	// XXX
 	return &rows{}, nil

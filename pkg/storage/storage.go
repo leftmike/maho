@@ -31,7 +31,30 @@ type Transaction interface {
 	NextStmt()
 }
 
-type PredicateFn func(row types.Row) (bool, error)
+type Predicate interface {
+	Column() types.ColumnNum
+}
+
+type BoolPredicate interface {
+	Predicate(b types.BoolValue) bool
+}
+
+type StringPredicate interface {
+	Predicate(s types.StringValue) bool
+}
+
+type BytesPredicate interface {
+	Predicate(b types.BytesValue) bool
+}
+
+type Float64Predicate interface {
+	Predicate(f types.Float64Value) bool
+}
+
+type Int64Predicate interface {
+	Predicate(i types.Int64Value) bool
+}
+
 type RowId interface{}
 
 type Table interface {
@@ -45,7 +68,7 @@ type Table interface {
 	// XXX: AddIndex, RemoveIndex
 
 	Rows(ctx context.Context, cols []types.ColumnNum, minRow, maxRow types.Row,
-		pred PredicateFn) (Rows, error)
+		pred Predicate) (Rows, error)
 	Update(ctx context.Context, rid RowId, cols []types.ColumnNum, vals types.Row) error
 	Delete(ctx context.Context, rid RowId) error
 	Insert(ctx context.Context, rows []types.Row) error

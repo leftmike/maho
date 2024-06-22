@@ -15,26 +15,26 @@ type ValueType int
 
 const (
 	UnknownType ValueType = iota // XXX: Is this needed?
-	BooleanType
+	BoolType
 	StringType
 	BytesType
-	FloatType
-	IntegerType
+	Float64Type
+	Int64Type
 )
 
 func (vt ValueType) String() string {
 	switch vt {
 	case UnknownType:
 		return "UNKNOWN"
-	case BooleanType:
+	case BoolType:
 		return "BOOL"
 	case StringType:
 		return "STRING"
 	case BytesType:
 		return "BYTES"
-	case FloatType:
+	case Float64Type:
 		return "DOUBLE"
-	case IntegerType:
+	case Int64Type:
 		return "INT"
 	default:
 		panic(fmt.Sprintf("unexpected datatype; got %#v", vt))
