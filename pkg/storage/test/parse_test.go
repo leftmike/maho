@@ -50,3 +50,39 @@ func TestParseValue(t *testing.T) {
 		}
 	}
 }
+
+func TestParseRow(t *testing.T) {
+	cases := []struct {
+		s    string
+		r    string
+		fail bool
+	}{
+		{s: `(123, 'abc', true, 456.789, '\x010203')`},
+		{s: "(123 true)", fail: true},
+		{s: "123, true)", fail: true},
+		{s: "(123, true", fail: true},
+		{s: "()", fail: true},
+		{
+			s: " (    123,456 ,'abc'  ,   'def'    )   ",
+			r: "(123, 456, 'abc', 'def')",
+		},
+	}
+
+	for _, c := range cases {
+		row, err := test.ParseRow(strings.NewReader(c.s))
+		if err != nil {
+			if !c.fail {
+				t.Errorf("ParseRow(%s) failed with %s", c.s, err)
+			}
+		} else if c.fail {
+			t.Errorf("ParseRow(%s) did not fail", c.s)
+		} else {
+			r := row.String()
+			if c.r == "" && r != c.s {
+				t.Errorf("ParseRow(%s) got %s want %s", c.s, r, c.s)
+			} else if c.r != "" && r != c.r {
+				t.Errorf("ParseRow(%s) got %s want %s", c.s, r, c.r)
+			}
+		}
+	}
+}

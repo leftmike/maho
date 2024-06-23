@@ -217,14 +217,14 @@ func FormatValue(v Value) string {
 
 func (r Row) String() string {
 	var buf bytes.Buffer
-	buf.WriteRune('[')
+	buf.WriteRune('(')
 	for idx, val := range r {
 		if idx > 0 {
 			buf.WriteString(", ")
 		}
 		buf.WriteString(FormatValue(val))
 	}
-	buf.WriteRune(']')
+	buf.WriteRune(')')
 	return buf.String()
 }
 

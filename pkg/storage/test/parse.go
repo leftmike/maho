@@ -12,8 +12,10 @@ import (
 )
 
 var (
-	errUnexpectedEOF  = errors.New("parse: unexpected eof")
-	errBadBytesString = errors.New("parse: bad bytes string")
+	errUnexpectedEOF             = errors.New("parse: unexpected eof")
+	errBadBytesString            = errors.New("parse: bad bytes string")
+	errExpectedOpenParen         = errors.New("parse: expected open paren")
+	errExpectedCommaOrCloseParen = errors.New("parse: expected comma or close paren")
 )
 
 func skipWhitespace(rs io.RuneScanner) (rune, error) {
@@ -166,8 +168,43 @@ func ParseValue(rs io.RuneScanner) (types.Value, error) {
 
 func ParseRow(rs io.RuneScanner) (types.Row, error) {
 	// (123, 'abc', true, 456.789, '\x010203')
-	// XXX
-	return nil, nil
+
+	r, err := skipWhitespace(rs)
+	if err != nil {
+		return nil, err
+	}
+
+	if r != '(' {
+		return nil, errExpectedOpenParen
+	}
+
+	var row types.Row
+	for {
+		_, err := skipWhitespace(rs)
+		if err != nil {
+			return nil, err
+		}
+		rs.UnreadRune()
+
+		val, err := ParseValue(rs)
+		if err != nil {
+			return nil, err
+		}
+
+		row = append(row, val)
+
+		r, err := skipWhitespace(rs)
+		if err != nil {
+			return nil, err
+		}
+		if r == ')' {
+			break
+		} else if r != ',' {
+			return nil, errExpectedCommaOrCloseParen
+		}
+	}
+
+	return row, nil
 }
 
 func ParseRows(rs io.RuneScanner) ([]types.Row, error) {

@@ -143,11 +143,11 @@ func TestRow(t *testing.T) {
 	}{
 		{
 			r: types.Row{types.BoolValue(true), types.Int64Value(123), types.Float64Value(0.0)},
-			s: "[true, 123, 0]",
+			s: "(true, 123, 0)",
 		},
-		{types.Row{}, "[]"},
-		{nil, "[]"},
-		{types.Row{types.BoolValue(false)}, "[false]"},
+		{types.Row{}, "()"},
+		{nil, "()"},
+		{types.Row{types.BoolValue(false)}, "(false)"},
 		{
 			r: types.Row{
 				types.Int64Value(0xFF),
@@ -155,14 +155,14 @@ func TestRow(t *testing.T) {
 				types.Float64Value(1.234),
 				types.StringValue("abcdef"),
 			},
-			s: "[255, -123, 1.234, 'abcdef']",
+			s: "(255, -123, 1.234, 'abcdef')",
 		},
 		{
 			r: types.Row{types.StringValue(""),
 				types.BytesValue(bytes.Repeat([]byte{0x12, 0xef}, 3)),
 				types.BytesValue([]byte{}),
 			},
-			s: `['', '\x12ef12ef12ef', '\x']`,
+			s: `('', '\x12ef12ef12ef', '\x')`,
 		},
 	}
 
@@ -304,34 +304,33 @@ func TestConvertRow(t *testing.T) {
 	}{
 		{
 			r: types.Row{types.BoolValue(true), types.StringValue("abc"), types.Int64Value(123)},
-			s: "[true, 'abc', 123]",
+			s: "(true, 'abc', 123)",
 		},
 		{
 			r: types.Row{types.StringValue("t"), types.StringValue("abc"), types.Int64Value(123)},
-			s: "[true, 'abc', 123]",
+			s: "(true, 'abc', 123)",
 		},
 		{
 			r: types.Row{types.BoolValue(true), types.StringValue("abc"),
 				types.StringValue("123")},
-			s: "[true, 'abc', 123]",
+			s: "(true, 'abc', 123)",
 		},
 		{
 			r: types.Row{types.BoolValue(true), types.Int64Value(123), types.Int64Value(123)},
-			s: "[true, '123', 123]",
+			s: "(true, '123', 123)",
 		},
 		{
 			r: types.Row{types.StringValue("t"), types.BytesValue([]byte("abc")),
 				types.StringValue("123")},
-			s: "[true, 'abc', 123]",
+			s: "(true, 'abc', 123)",
 		},
 		{
 			r:    types.Row{nil, types.BytesValue([]byte("abc")), types.StringValue("123")},
-			s:    "[NULL, 'abc', 123]",
 			fail: true,
 		},
 		{
 			r: types.Row{types.StringValue("t"), nil, types.StringValue("123")},
-			s: "[true, NULL, 123]",
+			s: "(true, NULL, 123)",
 		},
 	}
 
