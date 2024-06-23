@@ -92,6 +92,11 @@ func (b BytesValue) String() string {
 	return buf.String()
 }
 
+func Compare(val1, val2 Value) int {
+	// XXX
+	return 0
+}
+
 func FormatValue(v Value) string {
 	if v == nil {
 		return "NULL"
@@ -117,15 +122,12 @@ var (
 	errNotNullValue = errors.New("expected a non-null value")
 )
 
-func ConvertValue(ct ColumnType, val Value) (Value, error) {
+func CastValue(vt ValueType, val Value) (Value, error) {
 	if val == nil {
-		if ct.NotNull {
-			return nil, errNotNullValue
-		}
 		return nil, nil
 	}
 
-	switch ct.Type {
+	switch vt {
 	case BoolType:
 		if sv, ok := val.(StringValue); ok {
 			s := strings.Trim(string(sv), " \t\n")
@@ -140,45 +142,24 @@ func ConvertValue(ct ColumnType, val Value) (Value, error) {
 			return nil, fmt.Errorf("expected a boolean value: %v", val)
 		}
 	case StringType:
-		var s StringValue
 		if i, ok := val.(Int64Value); ok {
-			s = StringValue(strconv.FormatInt(int64(i), 10))
+			return StringValue(strconv.FormatInt(int64(i), 10)), nil
 		} else if f, ok := val.(Float64Value); ok {
-			s = StringValue(strconv.FormatFloat(float64(f), 'g', -1, 64))
+			return StringValue(strconv.FormatFloat(float64(f), 'g', -1, 64)), nil
 		} else if b, ok := val.(BytesValue); ok {
 			if !utf8.Valid([]byte(b)) {
 				return nil, fmt.Errorf("expected a valid utf8 string: %v", val)
 			}
-			s = StringValue(b)
-		} else {
-			var ok bool
-			s, ok = val.(StringValue)
-			if !ok {
-				return nil, fmt.Errorf("expected a string value: %v", val)
-			}
-
+			return StringValue(b), nil
+		} else if _, ok := val.(StringValue); !ok {
+			return nil, fmt.Errorf("expected a string value: %v", val)
 		}
-
-		if uint32(len(s)) > ct.Size {
-			return nil, fmt.Errorf("string value too long: %d; expected %d", len(s), ct.Size)
-		}
-		return s, nil
 	case BytesType:
-		var b BytesValue
 		if s, ok := val.(StringValue); ok {
-			b = BytesValue(s)
-		} else {
-			var ok bool
-			b, ok = val.(BytesValue)
-			if !ok {
-				return nil, fmt.Errorf("expected a bytes value: %v", val)
-			}
+			return BytesValue(s), nil
+		} else if _, ok = val.(BytesValue); !ok {
+			return nil, fmt.Errorf("expected a bytes value: %v", val)
 		}
-
-		if uint32(len(b)) > ct.Size {
-			return nil, fmt.Errorf("bytes value too long: %d; expected %d", len(b), ct.Size)
-		}
-		return b, nil
 	case Float64Type:
 		if i, ok := val.(Int64Value); ok {
 			return Float64Value(i), nil
@@ -192,21 +173,68 @@ func ConvertValue(ct ColumnType, val Value) (Value, error) {
 			return nil, fmt.Errorf("expected a float value: %v", val)
 		}
 	case Int64Type:
-		var i Int64Value
 		if f, ok := val.(Float64Value); ok {
-			i = Int64Value(f)
+			return Int64Value(f), nil
 		} else if s, ok := val.(StringValue); ok {
-			i64, err := strconv.ParseInt(strings.Trim(string(s), " \t\n"), 10, 64)
+			i, err := strconv.ParseInt(strings.Trim(string(s), " \t\n"), 10, 64)
 			if err != nil {
 				return nil, fmt.Errorf("expected an integer: %v: %s", val, err)
 			}
-			i = Int64Value(i64)
-		} else {
-			var ok bool
-			i, ok = val.(Int64Value)
-			if !ok {
-				return nil, fmt.Errorf("expected an integer value: %v", val)
-			}
+			return Int64Value(i), nil
+		} else if _, ok = val.(Int64Value); !ok {
+			return nil, fmt.Errorf("expected an integer value: %v", val)
+		}
+	default:
+		panic(fmt.Sprintf("expected a valid data type; got %v", vt))
+	}
+
+	return val, nil
+}
+
+func ConvertValue(ct ColumnType, val Value) (Value, error) {
+	if val == nil {
+		if ct.NotNull {
+			return nil, errNotNullValue
+		}
+		return nil, nil
+	}
+
+	val, err := CastValue(ct.Type, val)
+	if err != nil {
+		return nil, err
+	}
+
+	switch ct.Type {
+	case BoolType:
+		if _, ok := val.(BoolValue); !ok {
+			return nil, fmt.Errorf("expected a boolean value: %v", val)
+		}
+	case StringType:
+		s, ok := val.(StringValue)
+		if !ok {
+			return nil, fmt.Errorf("expected a string value: %v", val)
+		}
+
+		if uint32(len(s)) > ct.Size {
+			return nil, fmt.Errorf("string value too long: %d; expected %d", len(s), ct.Size)
+		}
+	case BytesType:
+		b, ok := val.(BytesValue)
+		if !ok {
+			return nil, fmt.Errorf("expected a bytes value: %v", val)
+		}
+
+		if uint32(len(b)) > ct.Size {
+			return nil, fmt.Errorf("bytes value too long: %d; expected %d", len(b), ct.Size)
+		}
+	case Float64Type:
+		if _, ok := val.(Float64Value); !ok {
+			return nil, fmt.Errorf("expected a float value: %v", val)
+		}
+	case Int64Type:
+		i, ok := val.(Int64Value)
+		if !ok {
+			return nil, fmt.Errorf("expected an integer value: %v", val)
 		}
 
 		if ct.Size == 2 && (i > math.MaxInt16 || i < math.MinInt16) {
@@ -214,7 +242,6 @@ func ConvertValue(ct ColumnType, val Value) (Value, error) {
 		} else if ct.Size == 4 && (i > math.MaxInt32 || i < math.MinInt32) {
 			return nil, fmt.Errorf("expected a 32 bit integer value: %d", i)
 		}
-		return i, nil
 	default:
 		panic(fmt.Sprintf("expected a valid data type; got %v", ct.Type))
 	}
@@ -230,6 +257,7 @@ func ConvertRow(colTypes []ColumnType, row Row) (Row, error) {
 		if err != nil {
 			return nil, err
 		}
+
 		if nval != val && nrow == nil {
 			nrow = append(make([]Value, 0, len(row)), row...)
 		} else if nrow == nil {
