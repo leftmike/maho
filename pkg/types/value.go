@@ -12,6 +12,8 @@ import (
 
 type Value interface {
 	String() string
+	order() int // Sort order
+	compare(val Value) int
 }
 
 type Row []Value
@@ -55,22 +57,102 @@ func (b BoolValue) String() string {
 	return "false"
 }
 
+func (_ BoolValue) order() int {
+	return 1
+}
+
+func (b BoolValue) compare(val Value) int {
+	if b2, ok := val.(BoolValue); ok {
+		if b {
+			if b2 {
+				return 0
+			}
+			return 1
+		} else {
+			if b2 {
+				return -1
+			}
+			return 0
+		}
+	}
+	panic(fmt.Sprintf("unexpected type for value: %T: %v", val, val))
+}
+
 type Int64Value int64
 
 func (i Int64Value) String() string {
 	return fmt.Sprintf("%v", int64(i))
 }
 
+func (_ Int64Value) order() int {
+	return 2
+}
+
+func (i Int64Value) compare(val Value) int {
+	switch v := val.(type) {
+	case Int64Value:
+		if i < v {
+			return -1
+		} else if i > v {
+			return 1
+		}
+		return 0
+	case Float64Value:
+		if Float64Value(i) < v {
+			return -1
+		} else if Float64Value(i) > v {
+			return 1
+		}
+		return 0
+	}
+	panic(fmt.Sprintf("unexpected type for value: %T: %v", val, val))
+}
+
 type Float64Value float64
 
-func (d Float64Value) String() string {
-	return fmt.Sprintf("%v", float64(d))
+func (f Float64Value) String() string {
+	return fmt.Sprintf("%v", float64(f))
+}
+
+func (_ Float64Value) order() int {
+	return 2
+}
+
+func (f Float64Value) compare(val Value) int {
+	switch v := val.(type) {
+	case Int64Value:
+		if f < Float64Value(v) {
+			return -1
+		} else if f > Float64Value(v) {
+			return 1
+		}
+		return 0
+	case Float64Value:
+		if f < v {
+			return -1
+		} else if f > v {
+			return 1
+		}
+		return 0
+	}
+	panic(fmt.Sprintf("unexpected type for value: %T: %v", val, val))
 }
 
 type StringValue string
 
 func (s StringValue) String() string {
 	return fmt.Sprintf("'%s'", string(s)) // XXX
+}
+
+func (_ StringValue) order() int {
+	return 3
+}
+
+func (s StringValue) compare(val Value) int {
+	if s2, ok := val.(StringValue); ok {
+		return strings.Compare(string(s), string(s2))
+	}
+	panic(fmt.Sprintf("unexpected type for value: %T: %v", val, val))
 }
 
 type BytesValue []byte
@@ -92,9 +174,37 @@ func (b BytesValue) String() string {
 	return buf.String()
 }
 
+func (_ BytesValue) order() int {
+	return 4
+}
+
+func (b BytesValue) compare(val Value) int {
+	if b2, ok := val.(BytesValue); ok {
+		return bytes.Compare([]byte(b), []byte(b2))
+	}
+	panic(fmt.Sprintf("unexpected type for value: %T: %v", val, val))
+}
+
 func Compare(val1, val2 Value) int {
-	// XXX
-	return 0
+	if val1 == nil {
+		if val2 == nil {
+			return 0
+		}
+		return -1
+	}
+	if val2 == nil {
+		return 1
+	}
+
+	o1 := val1.order()
+	o2 := val2.order()
+	if o1 < o2 {
+		return -1
+	} else if o1 > o2 {
+		return 1
+	}
+
+	return val1.compare(val2)
 }
 
 func FormatValue(v Value) string {

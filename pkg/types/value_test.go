@@ -91,6 +91,51 @@ func TestValueType(t *testing.T) {
 	}
 }
 
+func TestCompare(t *testing.T) {
+	cases := []struct {
+		v1, v2 types.Value
+		cmp    int
+	}{
+		{nil, types.BoolValue(true), -1},
+		{nil, nil, 0},
+
+		{types.BoolValue(false), nil, 1},
+		{types.BoolValue(true), types.BoolValue(true), 0},
+		{types.BoolValue(false), types.BoolValue(false), 0},
+		{types.BoolValue(false), types.BoolValue(true), -1},
+		{types.BoolValue(true), types.BoolValue(false), 1},
+		{types.BoolValue(false), types.Float64Value(1.23), -1},
+
+		{types.Float64Value(1.23), types.BoolValue(false), 1},
+		{types.Float64Value(1.23), types.Int64Value(123), -1},
+		{types.Float64Value(1.23), types.StringValue("abc"), -1},
+		{types.Float64Value(1.23), types.Float64Value(2.34), -1},
+		{types.Float64Value(1.23), types.Float64Value(1.23), 0},
+		{types.Float64Value(1.23), types.Float64Value(0.12), 1},
+
+		{types.Int64Value(123), types.BoolValue(false), 1},
+		{types.Int64Value(123), types.Float64Value(1.23), 1},
+		{types.Int64Value(123), types.StringValue("abc"), -1},
+		{types.Int64Value(123), types.Int64Value(234), -1},
+		{types.Int64Value(123), types.Int64Value(123), 0},
+		{types.Int64Value(123), types.Int64Value(12), 1},
+
+		{types.StringValue("abc"), types.BoolValue(false), 1},
+		{types.StringValue("abc"), types.Float64Value(1.23), 1},
+		{types.StringValue("abc"), types.Int64Value(123), 1},
+		{types.StringValue("def"), types.StringValue("ghi"), -1},
+		{types.StringValue("def"), types.StringValue("def"), 0},
+		{types.StringValue("def"), types.StringValue("abc"), 1},
+	}
+
+	for _, c := range cases {
+		cmp := types.Compare(c.v1, c.v2)
+		if cmp != c.cmp {
+			t.Errorf("Compare(%v, %v) got %d want %d", c.v1, c.v2, cmp, c.cmp)
+		}
+	}
+}
+
 func TestRow(t *testing.T) {
 	cases := []struct {
 		r types.Row
