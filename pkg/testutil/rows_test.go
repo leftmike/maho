@@ -32,3 +32,39 @@ func TestFormatRows(t *testing.T) {
 		}
 	}
 }
+
+func TestRowsEqual(t *testing.T) {
+	cases := []struct {
+		s1, s2    string
+		unordered bool
+		eq        bool
+	}{
+		{
+			s1:        `('abc', NULL, true), (12.45, 678, false), (1, 23, 456)`,
+			s2:        `('abc', NULL, true), (12.45, 678, false), (1, 23, 456)`,
+			unordered: false,
+			eq:        true,
+		},
+		{
+			s1:        `('abc', NULL, true), (12.45, 678, false), (1, 23, 456)`,
+			s2:        `(12.45, 678, false), (1, 23, 456), ('abc', NULL, true)`,
+			unordered: false,
+			eq:        false,
+		},
+		{
+			s1:        `('abc', NULL, true), (12.45, 678, false), (1, 23, 456)`,
+			s2:        `(12.45, 678, false), (1, 23, 456), ('abc', NULL, true)`,
+			unordered: true,
+			eq:        true,
+		},
+	}
+
+	for _, c := range cases {
+		rows1 := testutil.MustParseRows(c.s1)
+		rows2 := testutil.MustParseRows(c.s2)
+		eq := testutil.RowsEqual(rows1, rows2, c.unordered)
+		if eq != c.eq {
+			t.Errorf("RowsEqual(%s, %s, %v) got %v want %v", c.s1, c.s2, c.unordered, eq, c.eq)
+		}
+	}
+}
