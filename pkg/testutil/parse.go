@@ -1,4 +1,4 @@
-package test
+package testutil
 
 import (
 	"errors"
@@ -14,6 +14,7 @@ import (
 var (
 	errUnexpectedEOF             = errors.New("parse: unexpected eof")
 	errBadBytesString            = errors.New("parse: bad bytes string")
+	errExpectedComma             = errors.New("parse: expected comma")
 	errExpectedOpenParen         = errors.New("parse: expected open paren")
 	errExpectedCommaOrCloseParen = errors.New("parse: expected comma or close paren")
 )
@@ -209,6 +210,25 @@ func ParseRow(rs io.RuneScanner) (types.Row, error) {
 
 func ParseRows(rs io.RuneScanner) ([]types.Row, error) {
 	// (123, 'abc', true), (456, 'def', false), (789, 'ghi', null)
-	// XXX
-	return nil, nil
+
+	var rows []types.Row
+	for {
+		row, err := ParseRow(rs)
+		if err != nil {
+			return nil, err
+		}
+
+		rows = append(rows, row)
+
+		r, err := skipWhitespace(rs)
+		if err == io.EOF {
+			break
+		} else if err != nil {
+			return nil, err
+		} else if r != ',' {
+			return nil, errExpectedComma
+		}
+	}
+
+	return rows, nil
 }

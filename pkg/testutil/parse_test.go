@@ -1,10 +1,10 @@
-package test_test
+package testutil_test
 
 import (
 	"strings"
 	"testing"
 
-	"github.com/leftmike/maho/pkg/storage/test"
+	"github.com/leftmike/maho/pkg/testutil"
 	"github.com/leftmike/maho/pkg/types"
 )
 
@@ -38,7 +38,7 @@ func TestParseValue(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		val, err := test.ParseValue(strings.NewReader(c.s))
+		val, err := testutil.ParseValue(strings.NewReader(c.s))
 		if err != nil {
 			if !c.fail {
 				t.Errorf("ParseValue(%s) failed with %s", c.s, err)
@@ -69,7 +69,7 @@ func TestParseRow(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		row, err := test.ParseRow(strings.NewReader(c.s))
+		r, err := testutil.ParseRow(strings.NewReader(c.s))
 		if err != nil {
 			if !c.fail {
 				t.Errorf("ParseRow(%s) failed with %s", c.s, err)
@@ -77,11 +77,51 @@ func TestParseRow(t *testing.T) {
 		} else if c.fail {
 			t.Errorf("ParseRow(%s) did not fail", c.s)
 		} else {
-			r := row.String()
-			if c.r == "" && r != c.s {
-				t.Errorf("ParseRow(%s) got %s want %s", c.s, r, c.s)
-			} else if c.r != "" && r != c.r {
-				t.Errorf("ParseRow(%s) got %s want %s", c.s, r, c.r)
+			s := r.String()
+			if c.r == "" && s != c.s {
+				t.Errorf("ParseRow(%s) got %s want %s", c.s, s, c.s)
+			} else if c.r != "" && s != c.r {
+				t.Errorf("ParseRow(%s) got %s want %s", c.s, s, c.r)
+			}
+		}
+	}
+}
+
+func TestParseRows(t *testing.T) {
+	cases := []struct {
+		s    string
+		r    string
+		fail bool
+	}{
+		{s: `(123, 'abc', true, 456.789, '\x010203')`},
+		{s: "(12, 345), (123 true)", fail: true},
+		{s: "(true, false), 123, true)", fail: true},
+		{s: "('abc', 'def'), (123, true", fail: true},
+		{s: "(12, 345), ()", fail: true},
+		{
+			s: " (    123,456 ,'abc'  ,   'def'    )   ",
+			r: "(123, 456, 'abc', 'def')",
+		},
+		{
+			s: "(12,34,'abc')   ,('def',567,89),    (true,true,false),(null,null,null)",
+			r: "(12, 34, 'abc'), ('def', 567, 89), (true, true, false), (NULL, NULL, NULL)",
+		},
+	}
+
+	for _, c := range cases {
+		rows, err := testutil.ParseRows(strings.NewReader(c.s))
+		if err != nil {
+			if !c.fail {
+				t.Errorf("ParseRows(%s) failed with %s", c.s, err)
+			}
+		} else if c.fail {
+			t.Errorf("ParseRows(%s) did not fail", c.s)
+		} else {
+			s := testutil.FormatRows(rows, ", ")
+			if c.r == "" && s != c.s {
+				t.Errorf("ParseRows(%s) got %s want %s", c.s, s, c.s)
+			} else if c.r != "" && s != c.r {
+				t.Errorf("ParseRows(%s) got %s want %s", c.s, s, c.r)
 			}
 		}
 	}
