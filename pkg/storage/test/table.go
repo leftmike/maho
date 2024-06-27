@@ -4,7 +4,16 @@ import (
 	"testing"
 
 	"github.com/leftmike/maho/pkg/storage"
+	"github.com/leftmike/maho/pkg/testutil"
 	"github.com/leftmike/maho/pkg/types"
+)
+
+var (
+	col1 = types.ID("col1", false)
+	col2 = types.ID("col2", false)
+	col3 = types.ID("col3", false)
+	col4 = types.ID("col4", false)
+	col5 = types.ID("col5", false)
 )
 
 func TestCreateTable(t *testing.T, store string, newStore NewStore) {
@@ -14,10 +23,6 @@ func TestCreateTable(t *testing.T, store string, newStore NewStore) {
 	if err != nil {
 		t.Fatalf("%s.NewStore() failed with %s", store, err)
 	}
-
-	col1 := types.ID("col1", false)
-	col2 := types.ID("col2", false)
-	col3 := types.ID("col3", false)
 
 	colNames1 := []types.Identifier{col1, col2}
 	colTypes1 := []types.ColumnType{types.IdColType, types.Int32ColType}
@@ -175,9 +180,6 @@ func TestDropTable(t *testing.T, store string, newStore NewStore) {
 		t.Fatalf("%s.NewStore() failed with %s", store, err)
 	}
 
-	col1 := types.ID("col1", false)
-	col2 := types.ID("col2", false)
-
 	colNames := []types.Identifier{col1, col2}
 	colTypes := []types.ColumnType{types.IdColType, types.Int32ColType}
 	primary := []types.ColumnKey{types.MakeColumnKey(0, false)}
@@ -242,6 +244,71 @@ func TestDropTable(t *testing.T, store string, newStore NewStore) {
 		},
 		OpenTable{
 			tid: storage.EngineTableId + 2,
+		},
+		Rollback{},
+	})
+}
+
+func TestInsert(t *testing.T, store string, newStore NewStore) {
+	t.Helper()
+
+	st, err := newStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("%s.NewStore() failed with %s", store, err)
+	}
+
+	colNames := []types.Identifier{col1, col2, col3, col4, col5}
+	colTypes := []types.ColumnType{
+		types.BoolColType,
+		types.StringColType,
+		types.ColumnType{Type: types.BytesType, Size: 2048},
+		types.ColumnType{Type: types.Float64Type, NotNull: true},
+		types.ColumnType{Type: types.Int64Type, Size: 4},
+	}
+	primary := []types.ColumnKey{types.MakeColumnKey(1, false)}
+	testStorage(t, st.Begin(), nil, []interface{}{
+		CreateTable{
+			tid:      storage.EngineTableId + 1,
+			colNames: colNames,
+			colTypes: colTypes,
+			primary:  primary,
+		},
+		Commit{},
+	})
+
+	testStorage(t, st.Begin(), nil, []interface{}{
+		OpenTable{
+			tid: storage.EngineTableId + 1,
+		},
+		Insert{
+			rows: testutil.MustParseRows(`
+(true, 'abcdef', null, 123.456, 789),
+(false, 'ABC', '\x010203', 1.23, 45),
+(false, 'xyz', null, 23.45)`),
+		},
+		Commit{},
+	})
+
+	testStorage(t, st.Begin(), nil, []interface{}{
+		OpenTable{
+			tid: storage.EngineTableId + 1,
+		},
+		Insert{
+			rows: testutil.MustParseRows(`
+(true, 'abcdef', null, 123.456, 789)`),
+			fail: true,
+		},
+		Rollback{},
+	})
+
+	testStorage(t, st.Begin(), nil, []interface{}{
+		OpenTable{
+			tid: storage.EngineTableId + 1,
+		},
+		Insert{
+			rows: testutil.MustParseRows(`
+(true, 'qrst', null, 123.456, 789, false)`),
+			fail: true,
 		},
 		Rollback{},
 	})

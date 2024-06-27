@@ -293,7 +293,7 @@ func TestConvertValue(t *testing.T) {
 func TestConvertRow(t *testing.T) {
 	colTypes := []types.ColumnType{
 		{Type: types.BoolType, NotNull: true},
-		{Type: types.StringType, Size: types.MaxColumnSize},
+		{Type: types.StringType, Size: types.MaxColumnSize, NotNull: true},
 		{Type: types.Int64Type, Size: 8},
 	}
 
@@ -329,8 +329,21 @@ func TestConvertRow(t *testing.T) {
 			fail: true,
 		},
 		{
-			r: types.Row{types.StringValue("t"), nil, types.StringValue("123")},
-			s: "(true, NULL, 123)",
+			r: types.Row{types.StringValue("t"), types.StringValue(""), types.StringValue("123")},
+			s: "(true, '', 123)",
+		},
+		{
+			r: types.Row{types.BoolValue(true), types.StringValue("abc"), types.Int64Value(123),
+				types.Int64Value(456)},
+			fail: true,
+		},
+		{
+			r: types.Row{types.StringValue("t"), types.StringValue("abc")},
+			s: "(true, 'abc', NULL)",
+		},
+		{
+			r: types.Row{types.StringValue("t")},
+			s: "(true, NULL, NULL)",
 		},
 	}
 

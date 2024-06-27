@@ -58,6 +58,7 @@ type Int64Predicate interface {
 type RowId interface{}
 
 type Table interface {
+	TID() TableId
 	Version() uint32
 	Name() types.TableName
 	ColumnNames() []types.Identifier

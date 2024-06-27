@@ -82,6 +82,15 @@ type Commit struct{}
 type Rollback struct{}
 type NextStmt struct{}
 
+type Rows struct{}   // XXX
+type Update struct{} // XXX
+type Delete struct{} // XXX
+
+type Insert struct {
+	rows []types.Row
+	fail bool
+}
+
 func testStorage(t *testing.T, tx storage.Transaction, tbl storage.Table,
 	cases []interface{}) (storage.Transaction, storage.Table) {
 
@@ -137,6 +146,11 @@ func testStorage(t *testing.T, tx storage.Transaction, tbl storage.Table,
 		case TableType:
 			// tbl must be valid
 
+			tid := tbl.TID()
+			if tid != c.tid {
+				t.Errorf("%d.TID() got %d want %d", c.tid, tid, c.tid)
+			}
+
 			tn := tableName(c.tid)
 			if tbl.Name() != tn {
 				t.Errorf("%d.Name() got %s want %s", c.tid, tbl.Name(), tn)
@@ -185,6 +199,16 @@ func testStorage(t *testing.T, tx storage.Transaction, tbl storage.Table,
 			tx = nil
 		case NextStmt:
 			tx.NextStmt()
+			// XXX
+		case Insert:
+			err := tbl.Insert(ctx, c.rows)
+			if c.fail {
+				if err == nil {
+					t.Errorf("%d.Insert() did not fail", tbl.TID())
+				}
+			} else if err != nil {
+				t.Errorf("%d.Insert() failed with %s", tbl.TID(), err)
+			}
 		}
 	}
 

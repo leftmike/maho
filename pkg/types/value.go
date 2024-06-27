@@ -360,27 +360,22 @@ func ConvertValue(ct ColumnType, val Value) (Value, error) {
 }
 
 func ConvertRow(colTypes []ColumnType, row Row) (Row, error) {
-	var nrow Row
+	if len(row) > len(colTypes) {
+		return nil, fmt.Errorf("row too long; expected %d values", len(colTypes))
+	}
 
-	for idx, val := range row {
-		nval, err := ConvertValue(colTypes[idx], val)
+	nrow := make([]Value, len(colTypes))
+	idx := 0
+	for idx < len(row) {
+		var err error
+		nrow[idx], err = ConvertValue(colTypes[idx], row[idx])
 		if err != nil {
 			return nil, err
 		}
-
-		if nval != val && nrow == nil {
-			nrow = append(make([]Value, 0, len(row)), row...)
-		} else if nrow == nil {
-			continue
-		}
-
-		nrow[idx] = nval
+		idx += 1
 	}
 
-	if nrow != nil {
-		return nrow, nil
-	}
-	return row, nil
+	return nrow, nil
 }
 
 /*

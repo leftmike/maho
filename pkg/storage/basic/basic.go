@@ -209,6 +209,10 @@ func (tx *transaction) forWrite() {
 	}
 }
 
+func (tbl *table) TID() storage.TableId {
+	return tbl.tid
+}
+
 func (tbl *table) Version() uint32 {
 	return tbl.tt.Version
 }
@@ -284,8 +288,8 @@ func (tbl *table) Insert(ctx context.Context, rows []types.Row) error {
 
 		it := toItem(toRelationId(tbl.tid, primaryIndexId), tbl.tt.Primary, row)
 		if tbl.tx.tree.Has(it) {
-			return fmt.Errorf("basic: %s: primary index: existing row with duplicate key:",
-				tbl.tt.Name)
+			return fmt.Errorf("basic: %s: primary index: existing row with duplicate key: %s",
+				tbl.tt.Name, row)
 		}
 
 		tbl.tx.tree.ReplaceOrInsert(it)
