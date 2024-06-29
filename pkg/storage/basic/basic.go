@@ -6,6 +6,7 @@ import (
 	"encoding/gob"
 	"errors"
 	"fmt"
+	"io"
 	"sync"
 
 	"github.com/google/btree"
@@ -23,8 +24,9 @@ type store struct {
 }
 
 type transaction struct {
-	st   *store
-	tree *btree.BTreeG[item]
+	st        *store
+	tree      *btree.BTreeG[item]
+	rowsCount int
 }
 
 type tableType struct {
@@ -43,8 +45,10 @@ type table struct {
 }
 
 type rows struct {
+	tbl   *table
 	cols  []types.ColumnNum
 	items []item
+	next  int
 }
 
 func NewStore(dataDir string) (storage.Store, error) {
@@ -179,6 +183,8 @@ func (tx *transaction) DropTable(ctx context.Context, tid storage.TableId) error
 func (tx *transaction) Commit(ctx context.Context) error {
 	if tx.st == nil {
 		return errors.New("basic: transaction already completed")
+	} else if tx.rowsCount != 0 {
+		panic(fmt.Sprintf("basic: commit transaction has open rows: %d", tx.rowsCount))
 	}
 
 	tx.st.tree = tx.tree
@@ -191,6 +197,8 @@ func (tx *transaction) Commit(ctx context.Context) error {
 func (tx *transaction) Rollback() error {
 	if tx.st == nil {
 		return errors.New("basic: transaction already completed")
+	} else if tx.rowsCount != 0 {
+		panic(fmt.Sprintf("basic: rollback transaction has open rows: %d", tx.rowsCount))
 	}
 
 	tx.st.mutex.Unlock()
@@ -259,14 +267,16 @@ func (tbl *table) Rows(ctx context.Context, cols []types.ColumnNum, minRow, maxR
 			return true
 		})
 
+	tbl.tx.rowsCount += 1
 	return &rows{
+		tbl:   tbl,
 		cols:  cols,
 		items: items,
 	}, nil
 }
 
 func (tbl *table) Update(ctx context.Context, rid storage.RowId, cols []types.ColumnNum,
-	vals types.Row) error {
+	vals []types.Value) error {
 
 	// XXX
 	return nil
@@ -298,17 +308,34 @@ func (tbl *table) Insert(ctx context.Context, rows []types.Row) error {
 	return nil
 }
 
-func (rs *rows) Next(ctx context.Context, row types.Row) (types.Row, error) {
-	// XXX
-	return nil, nil
+func (rs *rows) Next(ctx context.Context) (types.Row, error) {
+	if rs.next < 0 {
+		panic(fmt.Sprintf("basic: next on closed rows for table %d", rs.tbl.tid))
+	}
+
+	if rs.next == len(rs.items) {
+		return nil, io.EOF
+	}
+
+	rs.next += 1
+	// XXX: if rs.cols != nil
+	return rs.items[rs.next-1].row, nil
 }
 
-func (rs *rows) Current(ctx context.Context) (storage.RowId, error) {
-	// XXX
-	return nil, nil
+func (rs *rows) Current() (storage.RowId, error) {
+	if rs.next <= 0 {
+		panic(fmt.Sprintf("basic: missing current on rows for table %d", rs.tbl.tid))
+	}
+
+	return rs.items[rs.next-1].key, nil
 }
 
 func (rs *rows) Close(ctx context.Context) error {
-	// XXX
+	if rs.next < 0 {
+		panic(fmt.Sprintf("basic: close on closed rows for table %d", rs.tbl.tid))
+	}
+
+	rs.tbl.tx.rowsCount -= 1
+	rs.next = -1
 	return nil
 }

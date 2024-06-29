@@ -3,10 +3,12 @@ package test
 import (
 	"context"
 	"fmt"
+	"io"
 	"reflect"
 	"testing"
 
 	"github.com/leftmike/maho/pkg/storage"
+	"github.com/leftmike/maho/pkg/testutil"
 	"github.com/leftmike/maho/pkg/types"
 )
 
@@ -40,6 +42,42 @@ func tableErrorPanicked(fn func() (storage.Table, error)) (tbl storage.Table, er
 	}()
 
 	tbl, err = fn()
+	panicked = false
+	return
+}
+
+func rowErrorPanicked(fn func() (types.Row, error)) (row types.Row, err error,
+	panicked bool) {
+
+	defer func() {
+		if r := recover(); r != nil {
+			if _, ok := r.(string); ok {
+				panicked = true
+			} else {
+				panic(r)
+			}
+		}
+	}()
+
+	row, err = fn()
+	panicked = false
+	return
+}
+
+func rowIdErrorPanicked(fn func() (storage.RowId, error)) (rowId storage.RowId, err error,
+	panicked bool) {
+
+	defer func() {
+		if r := recover(); r != nil {
+			if _, ok := r.(string); ok {
+				panicked = true
+			} else {
+				panic(r)
+			}
+		}
+	}()
+
+	rowId, err = fn()
 	panicked = false
 	return
 }
@@ -78,24 +116,66 @@ type TableType struct {
 	primary  []types.ColumnKey
 }
 
-type Commit struct{}
-type Rollback struct{}
+type Commit struct {
+	panicked bool
+}
+
+type Rollback struct {
+	panicked bool
+}
+
 type NextStmt struct{}
 
-type Rows struct{}   // XXX
-type Update struct{} // XXX
-type Delete struct{} // XXX
+type Rows struct {
+	cols   []types.ColumnNum
+	minRow types.Row
+	maxRow types.Row
+	pred   storage.Predicate
+	fail   bool
+}
+
+type Update struct {
+	rid  storage.RowId
+	cols []types.ColumnNum
+	vals []types.Value
+	fail bool
+}
+type Delete struct {
+	rid  storage.RowId
+	fail bool
+}
 
 type Insert struct {
 	rows []types.Row
 	fail bool
 }
 
+type Next struct {
+	row      types.Row
+	fail     bool
+	eof      bool
+	panicked bool
+}
+
+type Current struct {
+	fail     bool
+	panicked bool
+}
+
+type Close struct {
+	fail     bool
+	panicked bool
+}
+
+// XXX: add ways to call Select, UpdateSet, DeleteFrom
+
 func testStorage(t *testing.T, tx storage.Transaction, tbl storage.Table,
-	cases []interface{}) (storage.Transaction, storage.Table) {
+	cases []interface{}) storage.Table {
 
 	ctx := context.Background()
 
+	var rows storage.Rows
+	var rid storage.RowId
 	var err error
 	for _, c := range cases {
 		switch c := c.(type) {
@@ -108,7 +188,6 @@ func testStorage(t *testing.T, tx storage.Transaction, tbl storage.Table,
 				if !c.panicked {
 					t.Errorf("OpenTable(%d) panicked", c.tid)
 				}
-				continue
 			} else if c.panicked {
 				t.Errorf("OpenTable(%d) did not panic", c.tid)
 			} else if err != nil {
@@ -123,7 +202,6 @@ func testStorage(t *testing.T, tx storage.Transaction, tbl storage.Table,
 				if !c.panicked {
 					t.Errorf("CreateTable(%d) panicked", c.tid)
 				}
-				continue
 			} else if c.panicked {
 				t.Errorf("CreateTable(%d) did not panic", c.tid)
 			} else if err != nil {
@@ -186,20 +264,70 @@ func testStorage(t *testing.T, tx storage.Transaction, tbl storage.Table,
 				}
 			}
 		case Commit:
-			err := tx.Commit(ctx)
-			if err != nil {
+			err, panicked := errorPanicked(func() error {
+				return tx.Commit(ctx)
+			})
+			if panicked {
+				if !c.panicked {
+					t.Errorf("Commit() panicked")
+				}
+			} else if c.panicked {
+				t.Errorf("Commit() did not panic")
+			} else if err != nil {
 				t.Errorf("Commit() failed with %s", err)
 			}
-			tx = nil
+
+			if err == nil && !panicked {
+				tx = nil
+			}
 		case Rollback:
-			err := tx.Rollback()
-			if err != nil {
+			err, panicked := errorPanicked(func() error {
+				return tx.Rollback()
+			})
+			if panicked {
+				if !c.panicked {
+					t.Errorf("Rollback() panicked")
+				}
+			} else if c.panicked {
+				t.Errorf("Rollback() did not panic")
+				tx = nil
+			} else if err != nil {
 				t.Errorf("Rollback() failed with %s", err)
 			}
-			tx = nil
+
+			if err == nil && !panicked {
+				tx = nil
+			}
 		case NextStmt:
 			tx.NextStmt()
-			// XXX
+		case Rows:
+			var err error
+			rows, err = tbl.Rows(ctx, c.cols, c.minRow, c.maxRow, c.pred)
+			if c.fail {
+				if err == nil {
+					t.Errorf("%d.Rows() did not fail", tbl.TID())
+				}
+			} else if err != nil {
+				t.Errorf("%d.Rows() failed with %s", tbl.TID(), err)
+			}
+		case Update:
+			err := tbl.Update(ctx, rid, c.cols, c.vals)
+			if c.fail {
+				if err == nil {
+					t.Errorf("%d.Update() did not fail", tbl.TID())
+				}
+			} else if err != nil {
+				t.Errorf("%d.Update() failed with %s", tbl.TID(), err)
+			}
+		case Delete:
+			err := tbl.Delete(ctx, rid)
+			if c.fail {
+				if err == nil {
+					t.Errorf("%d.Delete() did not fail", tbl.TID())
+				}
+			} else if err != nil {
+				t.Errorf("%d.Delete() failed with %s", tbl.TID(), err)
+			}
 		case Insert:
 			err := tbl.Insert(ctx, c.rows)
 			if c.fail {
@@ -209,8 +337,70 @@ func testStorage(t *testing.T, tx storage.Transaction, tbl storage.Table,
 			} else if err != nil {
 				t.Errorf("%d.Insert() failed with %s", tbl.TID(), err)
 			}
+		case Next:
+			row, err, panicked := rowErrorPanicked(func() (types.Row, error) {
+				return rows.Next(ctx)
+			})
+			if panicked {
+				if !c.panicked {
+					t.Errorf("Rows(%d).Next() panicked", tbl.TID())
+				}
+			} else if c.panicked {
+				t.Errorf("Rows(%d).Next() did not panic", tbl.TID())
+			} else if c.fail {
+				if err == nil {
+					t.Errorf("Rows(%d).Next() did not fail", tbl.TID())
+				}
+			} else if c.eof {
+				if err != io.EOF {
+					if err != nil {
+						t.Errorf("Rows(%d).Next() did not return io.EOF: %s", tbl.TID(), err)
+					} else {
+						t.Errorf("Rows(%d).Next() did not return io.EOF: %s", tbl.TID(), row)
+					}
+				}
+			} else if err != nil {
+				t.Errorf("Rows(%d).Next() failed with %s", tbl.TID(), err)
+			} else if testutil.CompareRows(row, c.row) != 0 {
+				t.Errorf("Rows(%d).Next() got %s want %s", tbl.TID(), row, c.row)
+			}
+		case Current:
+			var panicked bool
+			rid, err, panicked = rowIdErrorPanicked(func() (storage.RowId, error) {
+				return rows.Current()
+			})
+			if panicked {
+				if !c.panicked {
+					t.Errorf("Rows(%d).Current() panicked", tbl.TID())
+				}
+			} else if c.panicked {
+				t.Errorf("Rows(%d).Current() did not panic", tbl.TID())
+			} else if c.fail {
+				if err == nil {
+					t.Errorf("Rows(%d).Current() did not fail", tbl.TID())
+				}
+			} else if err != nil {
+				t.Errorf("Rows(%d).Current() failed with %s", tbl.TID(), err)
+			}
+		case Close:
+			err, panicked := errorPanicked(func() error {
+				return rows.Close(ctx)
+			})
+			if panicked {
+				if !c.panicked {
+					t.Errorf("Rows(%d).Close() panicked", tbl.TID())
+				}
+			} else if c.panicked {
+				t.Errorf("Rows(%d).Close() did not panic", tbl.TID())
+			} else if c.fail {
+				if err == nil {
+					t.Errorf("Rows(%d).Close() did not fail", tbl.TID())
+				}
+			} else if err != nil {
+				t.Errorf("Rows(%d).Close() failed with %s", tbl.TID(), err)
+			}
 		}
 	}
 
-	return tx, tbl
+	return tbl
 }

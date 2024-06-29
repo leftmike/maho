@@ -70,13 +70,13 @@ type Table interface {
 
 	Rows(ctx context.Context, cols []types.ColumnNum, minRow, maxRow types.Row,
 		pred Predicate) (Rows, error)
-	Update(ctx context.Context, rid RowId, cols []types.ColumnNum, vals types.Row) error
+	Update(ctx context.Context, rid RowId, cols []types.ColumnNum, vals []types.Value) error
 	Delete(ctx context.Context, rid RowId) error
 	Insert(ctx context.Context, rows []types.Row) error
 }
 
 type Rows interface {
-	Next(ctx context.Context, row types.Row) (types.Row, error)
-	Current(ctx context.Context) (RowId, error)
+	Next(ctx context.Context) (types.Row, error)
+	Current() (RowId, error)
 	Close(ctx context.Context) error
 }

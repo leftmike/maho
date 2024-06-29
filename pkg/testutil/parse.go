@@ -233,6 +233,14 @@ func ParseRows(rs io.RuneScanner) ([]types.Row, error) {
 	return rows, nil
 }
 
+func MustParseRow(s string) types.Row {
+	row, err := ParseRow(strings.NewReader(s))
+	if err != nil {
+		panic(fmt.Sprintf("must parse row: %s: %s", err, s))
+	}
+	return row
+}
+
 func MustParseRows(s string) []types.Row {
 	rows, err := ParseRows(strings.NewReader(s))
 	if err != nil {

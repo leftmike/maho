@@ -313,3 +313,261 @@ func TestInsert(t *testing.T, store string, newStore NewStore) {
 		Rollback{},
 	})
 }
+
+func TestRows(t *testing.T, store string, newStore NewStore) {
+	t.Helper()
+
+	st, err := newStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("%s.NewStore() failed with %s", store, err)
+	}
+
+	colNames := []types.Identifier{col1, col2, col3, col4}
+	colTypes := []types.ColumnType{
+		types.ColumnType{Type: types.Int64Type, Size: 4, NotNull: true},
+		types.ColumnType{Type: types.Int64Type, Size: 4, NotNull: true},
+		types.ColumnType{Type: types.Float64Type, NotNull: true},
+		types.StringColType,
+	}
+	primary := []types.ColumnKey{types.MakeColumnKey(0, false)}
+
+	testStorage(t, st.Begin(), nil, []interface{}{
+		CreateTable{
+			tid:      storage.EngineTableId + 1,
+			colNames: colNames,
+			colTypes: colTypes,
+			primary:  primary,
+		},
+		Commit{},
+	})
+
+	testStorage(t, st.Begin(), nil, []interface{}{
+		OpenTable{
+			tid: storage.EngineTableId + 1,
+		},
+		Insert{
+			rows: testutil.MustParseRows(`
+(0, 0, 0, 'zero'),
+(2, 20, 2.2, 'two'),
+(4, 40, 4.4, 'four'),
+(6, 60, 6.6, 'six'),
+(8, 80, 8.8, 'eight'),
+(10, 100, 10.10, 'ten')`),
+		},
+		Commit{},
+	})
+
+	testStorage(t, st.Begin(), nil, []interface{}{
+		OpenTable{
+			tid: storage.EngineTableId + 1,
+		},
+		Rows{},
+		Next{
+			row: testutil.MustParseRow("(0, 0, 0, 'zero')"),
+		},
+		Current{},
+		Next{
+			row: testutil.MustParseRow("(2, 20, 2.2, 'two')"),
+		},
+		Current{},
+		Next{
+			row: testutil.MustParseRow("(4, 40, 4.4, 'four')"),
+		},
+		Next{
+			row: testutil.MustParseRow("(6, 60, 6.6, 'six')"),
+		},
+		Next{
+			row: testutil.MustParseRow("(8, 80, 8.8, 'eight')"),
+		},
+		Next{
+			row: testutil.MustParseRow("(10, 100, 10.10, 'ten')`)"),
+		},
+		Next{
+			eof: true,
+		},
+		Close{},
+		Commit{},
+	})
+
+	testStorage(t, st.Begin(), nil, []interface{}{
+		OpenTable{
+			tid: storage.EngineTableId + 1,
+		},
+		Rows{},
+		Current{
+			panicked: true,
+		},
+		Close{},
+		Rollback{},
+	})
+
+	testStorage(t, st.Begin(), nil, []interface{}{
+		OpenTable{
+			tid: storage.EngineTableId + 1,
+		},
+		Rows{},
+		Next{
+			row: testutil.MustParseRow("(0, 0, 0, 'zero')"),
+		},
+		Close{},
+		Next{
+			panicked: true,
+		},
+		Rollback{},
+	})
+
+	testStorage(t, st.Begin(), nil, []interface{}{
+		OpenTable{
+			tid: storage.EngineTableId + 1,
+		},
+		Rows{},
+		Next{
+			row: testutil.MustParseRow("(0, 0, 0, 'zero')"),
+		},
+		Current{},
+		Close{},
+		Current{
+			panicked: true,
+		},
+		Rollback{},
+	})
+
+	testStorage(t, st.Begin(), nil, []interface{}{
+		OpenTable{
+			tid: storage.EngineTableId + 1,
+		},
+		Rows{},
+		Next{
+			row: testutil.MustParseRow("(0, 0, 0, 'zero')"),
+		},
+		Close{},
+		Close{
+			panicked: true,
+		},
+		Rollback{},
+	})
+
+	testStorage(t, st.Begin(), nil, []interface{}{
+		OpenTable{
+			tid: storage.EngineTableId + 1,
+		},
+		Rows{},
+		Next{
+			row: testutil.MustParseRow("(0, 0, 0, 'zero')"),
+		},
+		Rollback{
+			panicked: true,
+		},
+		Close{},
+		Rollback{},
+	})
+
+	testStorage(t, st.Begin(), nil, []interface{}{
+		OpenTable{
+			tid: storage.EngineTableId + 1,
+		},
+		Rows{},
+		Next{
+			row: testutil.MustParseRow("(0, 0, 0, 'zero')"),
+		},
+		Commit{
+			panicked: true,
+		},
+		Close{},
+		Commit{},
+	})
+
+	testStorage(t, st.Begin(), nil, []interface{}{
+		OpenTable{
+			tid: storage.EngineTableId + 1,
+		},
+		Rows{
+			minRow: testutil.MustParseRow("(6, 0, 0, '')"),
+		},
+		Next{
+			row: testutil.MustParseRow("(6, 60, 6.6, 'six')"),
+		},
+		Next{
+			row: testutil.MustParseRow("(8, 80, 8.8, 'eight')"),
+		},
+		Next{
+			row: testutil.MustParseRow("(10, 100, 10.10, 'ten')`)"),
+		},
+		Next{
+			eof: true,
+		},
+		Close{},
+		Commit{},
+	})
+
+	testStorage(t, st.Begin(), nil, []interface{}{
+		OpenTable{
+			tid: storage.EngineTableId + 1,
+		},
+		Rows{
+			maxRow: testutil.MustParseRow("(4, 0, 0, '')"),
+		},
+		Next{
+			row: testutil.MustParseRow("(0, 0, 0, 'zero')"),
+		},
+		Next{
+			row: testutil.MustParseRow("(2, 20, 2.2, 'two')"),
+		},
+		Next{
+			row: testutil.MustParseRow("(4, 40, 4.4, 'four')"),
+		},
+		Next{
+			eof: true,
+		},
+		Close{},
+		Commit{},
+	})
+
+	testStorage(t, st.Begin(), nil, []interface{}{
+		OpenTable{
+			tid: storage.EngineTableId + 1,
+		},
+		Rows{
+			minRow: testutil.MustParseRow("(4, 0, 0, '')"),
+			maxRow: testutil.MustParseRow("(8, 0, 0, '')"),
+		},
+		Next{
+			row: testutil.MustParseRow("(4, 40, 4.4, 'four')"),
+		},
+		Next{
+			row: testutil.MustParseRow("(6, 60, 6.6, 'six')"),
+		},
+		Next{
+			row: testutil.MustParseRow("(8, 80, 8.8, 'eight')"),
+		},
+		Next{
+			eof: true,
+		},
+		Close{},
+		Commit{},
+	})
+
+	testStorage(t, st.Begin(), nil, []interface{}{
+		OpenTable{
+			tid: storage.EngineTableId + 1,
+		},
+		Rows{
+			minRow: testutil.MustParseRow("(3, 0, 0, '')"),
+			maxRow: testutil.MustParseRow("(9, 0, 0, '')"),
+		},
+		Next{
+			row: testutil.MustParseRow("(4, 40, 4.4, 'four')"),
+		},
+		Next{
+			row: testutil.MustParseRow("(6, 60, 6.6, 'six')"),
+		},
+		Next{
+			row: testutil.MustParseRow("(8, 80, 8.8, 'eight')"),
+		},
+		Next{
+			eof: true,
+		},
+		Close{},
+		Commit{},
+	})
+}

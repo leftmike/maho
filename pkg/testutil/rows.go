@@ -19,7 +19,7 @@ func FormatRows(rows []types.Row, sep string) string {
 	return buf.String()
 }
 
-func compareRows(row1, row2 types.Row) int {
+func CompareRows(row1, row2 types.Row) int {
 	rdx := 0
 	for rdx < len(row1) && rdx < len(row2) {
 		cmp := types.Compare(row1[rdx], row2[rdx])
@@ -40,16 +40,26 @@ func compareRows(row1, row2 types.Row) int {
 }
 
 func RowsEqual(rows1, rows2 []types.Row, unordered bool) bool {
+	if len(rows1) != len(rows2) {
+		return false
+	}
+
 	if unordered {
 		sort.Slice(rows1,
 			func(i, j int) bool {
-				return compareRows(rows1[i], rows1[j]) < 0
+				return CompareRows(rows1[i], rows1[j]) < 0
 			})
 		sort.Slice(rows2,
 			func(i, j int) bool {
-				return compareRows(rows2[i], rows2[j]) < 0
+				return CompareRows(rows2[i], rows2[j]) < 0
 			})
 	}
 
-	return FormatRows(rows1, "") == FormatRows(rows2, "")
+	for idx := range rows1 {
+		if CompareRows(rows1[idx], rows2[idx]) != 0 {
+			return false
+		}
+	}
+
+	return true
 }
