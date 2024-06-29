@@ -151,10 +151,13 @@ type Insert struct {
 }
 
 type Next struct {
-	row      types.Row
 	fail     bool
 	eof      bool
 	panicked bool
+}
+
+type NextRow struct {
+	row string
 }
 
 type Current struct {
@@ -359,10 +362,22 @@ func testStorage(t *testing.T, tx storage.Transaction, tbl storage.Table,
 						t.Errorf("Rows(%d).Next() did not return io.EOF: %s", tbl.TID(), row)
 					}
 				}
+			} else {
+				t.Fatalf("Rows(%d).Next() test must set one of panicked, fail, or eof", tbl.TID())
+			}
+		case NextRow:
+			row, err, panicked := rowErrorPanicked(func() (types.Row, error) {
+				return rows.Next(ctx)
+			})
+			if panicked {
+				t.Errorf("Rows(%d).Next() panicked", tbl.TID())
 			} else if err != nil {
 				t.Errorf("Rows(%d).Next() failed with %s", tbl.TID(), err)
-			} else if testutil.CompareRows(row, c.row) != 0 {
-				t.Errorf("Rows(%d).Next() got %s want %s", tbl.TID(), row, c.row)
+			} else {
+				wantRow := testutil.MustParseRow(c.row)
+				if testutil.CompareRows(row, wantRow) != 0 {
+					t.Errorf("Rows(%d).Next() got %s want %s", tbl.TID(), row, wantRow)
+				}
 			}
 		case Current:
 			var panicked bool

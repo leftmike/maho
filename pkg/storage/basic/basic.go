@@ -241,6 +241,42 @@ func (tbl *table) Primary() []types.ColumnKey {
 	return tbl.tt.Primary
 }
 
+func predicateFunction(pred storage.Predicate, ct types.ColumnType) func(types.Value) bool {
+	switch ct.Type {
+	case types.UnknownType:
+		panic("unexpected column type: unknown")
+	case types.BoolType:
+		boolPred := pred.(storage.BoolPredicate)
+		return func(val types.Value) bool {
+			return boolPred.BoolPred(val.(types.BoolValue))
+		}
+	case types.StringType:
+		stringPred := pred.(storage.StringPredicate)
+		return func(val types.Value) bool {
+			return stringPred.StringPred(val.(types.StringValue))
+		}
+	case types.BytesType:
+		bytesPred := pred.(storage.BytesPredicate)
+		return func(val types.Value) bool {
+			return bytesPred.BytesPred(val.(types.BytesValue))
+		}
+	case types.Float64Type:
+		float64Pred := pred.(storage.Float64Predicate)
+		return func(val types.Value) bool {
+			return float64Pred.Float64Pred(val.(types.Float64Value))
+		}
+	case types.Int64Type:
+		int64Pred := pred.(storage.Int64Predicate)
+		return func(val types.Value) bool {
+			return int64Pred.Int64Pred(val.(types.Int64Value))
+		}
+	default:
+		panic(fmt.Sprintf("unexpected column type: %#v %d", ct, ct.Type))
+	}
+
+	return nil
+}
+
 func (tbl *table) Rows(ctx context.Context, cols []types.ColumnNum, minRow, maxRow types.Row,
 	pred storage.Predicate) (storage.Rows, error) {
 
@@ -249,6 +285,13 @@ func (tbl *table) Rows(ctx context.Context, cols []types.ColumnNum, minRow, maxR
 	var maxItem item
 	if maxRow != nil {
 		maxItem = toItem(rel, tbl.tt.Primary, maxRow)
+	}
+
+	var predFn func(types.Value) bool
+	var predCol types.ColumnNum
+	if pred != nil {
+		predCol = pred.Column()
+		predFn = predicateFunction(pred, tbl.tt.ColumnTypes[predCol])
 	}
 
 	var items []item
@@ -261,7 +304,9 @@ func (tbl *table) Rows(ctx context.Context, cols []types.ColumnNum, minRow, maxR
 				return false
 			}
 
-			// XXX: pred
+			if predFn != nil && !predFn(it.row[predCol]) {
+				return true
+			}
 
 			items = append(items, it)
 			return true
@@ -318,7 +363,14 @@ func (rs *rows) Next(ctx context.Context) (types.Row, error) {
 	}
 
 	rs.next += 1
-	// XXX: if rs.cols != nil
+	if rs.cols != nil {
+		row := make([]types.Value, len(rs.cols))
+		for idx, col := range rs.cols {
+			row[idx] = rs.items[rs.next-1].row[col]
+		}
+		return row, nil
+	}
+
 	return rs.items[rs.next-1].row, nil
 }
 

@@ -36,23 +36,23 @@ type Predicate interface {
 }
 
 type BoolPredicate interface {
-	Predicate(b types.BoolValue) bool
+	BoolPred(b types.BoolValue) bool
 }
 
 type StringPredicate interface {
-	Predicate(s types.StringValue) bool
+	StringPred(s types.StringValue) bool
 }
 
 type BytesPredicate interface {
-	Predicate(b types.BytesValue) bool
+	BytesPred(b types.BytesValue) bool
 }
 
 type Float64Predicate interface {
-	Predicate(f types.Float64Value) bool
+	Float64Pred(f types.Float64Value) bool
 }
 
 type Int64Predicate interface {
-	Predicate(i types.Int64Value) bool
+	Int64Pred(i types.Int64Value) bool
 }
 
 type RowId interface{}
