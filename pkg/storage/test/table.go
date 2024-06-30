@@ -261,13 +261,13 @@ func TestInsert(t *testing.T, store string, newStore NewStore) {
 
 	colNames := []types.Identifier{col1, col2, col3, col4, col5}
 	colTypes := []types.ColumnType{
-		types.BoolColType,
 		types.StringColType,
+		types.BoolColType,
 		types.ColumnType{Type: types.BytesType, Size: 2048},
 		types.ColumnType{Type: types.Float64Type, NotNull: true},
 		types.ColumnType{Type: types.Int64Type, Size: 4},
 	}
-	primary := []types.ColumnKey{types.MakeColumnKey(1, false)}
+	primary := []types.ColumnKey{types.MakeColumnKey(0, false)}
 	testStorage(t, st.Begin(), nil, []interface{}{
 		CreateTable{
 			tid:      storage.EngineTableId + 1,
@@ -284,9 +284,23 @@ func TestInsert(t *testing.T, store string, newStore NewStore) {
 		},
 		Insert{
 			rows: testutil.MustParseRows(`
-(true, 'abcdef', null, 123.456, 789),
-(false, 'ABC', '\x010203', 1.23, 45),
-(false, 'xyz', null, 23.45)`),
+('abcdef', true, null, 123.456, 789),
+('ABC', false, '\x010203', 1.23, 45),
+('xyz', false, null, 23.45)`),
+		},
+		Commit{},
+	})
+
+	testStorage(t, st.Begin(), nil, []interface{}{
+		OpenTable{
+			tid: storage.EngineTableId + 1,
+		},
+		Select{
+			rows: testutil.MustParseRows(`
+('abcdef', true, null, 123.456, 789),
+('ABC', false, '\x010203', 1.23, 45),
+('xyz', false, null, 23.45, null)`),
+			unordered: true,
 		},
 		Commit{},
 	})
@@ -297,7 +311,7 @@ func TestInsert(t *testing.T, store string, newStore NewStore) {
 		},
 		Insert{
 			rows: testutil.MustParseRows(`
-(true, 'abcdef', null, 123.456, 789)`),
+('abcdef',true, null, 123.456, 789)`),
 			fail: true,
 		},
 		Rollback{},
@@ -309,8 +323,22 @@ func TestInsert(t *testing.T, store string, newStore NewStore) {
 		},
 		Insert{
 			rows: testutil.MustParseRows(`
-(true, 'qrst', null, 123.456, 789, false)`),
+('qrst', true, null, 123.456, 789, false)`),
 			fail: true,
+		},
+		Rollback{},
+	})
+
+	testStorage(t, st.Begin(), nil, []interface{}{
+		OpenTable{
+			tid: storage.EngineTableId + 1,
+		},
+		Select{
+			rows: testutil.MustParseRows(`
+('abcdef', true, null, 123.456, 789),
+('ABC', false, '\x010203', 1.23, 45),
+('xyz', false, null, 23.45, null)`),
+			unordered: true,
 		},
 		Rollback{},
 	})
@@ -397,14 +425,14 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 			tid: storage.EngineTableId + 1,
 		},
 		Rows{},
-		NextRow{"(0, 0, 0, 'zero')"},
+		Next{row: testutil.MustParseRow("(0, 0, 0, 'zero')")},
 		Current{},
-		NextRow{"(2, 20, 2.2, 'two')"},
+		Next{row: testutil.MustParseRow("(2, 20, 2.2, 'two')")},
 		Current{},
-		NextRow{"(4, 40, 4.4, 'four')"},
-		NextRow{"(6, 60, 6.6, 'six')"},
-		NextRow{"(8, 80, 8.8, 'eight')"},
-		NextRow{"(10, 100, 10.10, 'ten')`)"},
+		Next{row: testutil.MustParseRow("(4, 40, 4.4, 'four')")},
+		Next{row: testutil.MustParseRow("(6, 60, 6.6, 'six')")},
+		Next{row: testutil.MustParseRow("(8, 80, 8.8, 'eight')")},
+		Next{row: testutil.MustParseRow("(10, 100, 10.10, 'ten')`)")},
 		Next{
 			eof: true,
 		},
@@ -429,7 +457,7 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 			tid: storage.EngineTableId + 1,
 		},
 		Rows{},
-		NextRow{"(0, 0, 0, 'zero')"},
+		Next{row: testutil.MustParseRow("(0, 0, 0, 'zero')")},
 		Close{},
 		Next{
 			panicked: true,
@@ -442,7 +470,7 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 			tid: storage.EngineTableId + 1,
 		},
 		Rows{},
-		NextRow{"(0, 0, 0, 'zero')"},
+		Next{row: testutil.MustParseRow("(0, 0, 0, 'zero')")},
 		Current{},
 		Close{},
 		Current{
@@ -456,7 +484,7 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 			tid: storage.EngineTableId + 1,
 		},
 		Rows{},
-		NextRow{"(0, 0, 0, 'zero')"},
+		Next{row: testutil.MustParseRow("(0, 0, 0, 'zero')")},
 		Close{},
 		Close{
 			panicked: true,
@@ -469,7 +497,7 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 			tid: storage.EngineTableId + 1,
 		},
 		Rows{},
-		NextRow{"(0, 0, 0, 'zero')"},
+		Next{row: testutil.MustParseRow("(0, 0, 0, 'zero')")},
 		Rollback{
 			panicked: true,
 		},
@@ -482,7 +510,7 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 			tid: storage.EngineTableId + 1,
 		},
 		Rows{},
-		NextRow{"(0, 0, 0, 'zero')"},
+		Next{row: testutil.MustParseRow("(0, 0, 0, 'zero')")},
 		Commit{
 			panicked: true,
 		},
@@ -494,16 +522,13 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 		OpenTable{
 			tid: storage.EngineTableId + 1,
 		},
-		Rows{
+		Select{
 			minRow: testutil.MustParseRow("(6, 0, 0, '')"),
+			rows: testutil.MustParseRows(`
+(6, 60, 6.6, 'six'),
+(8, 80, 8.8, 'eight'),
+(10, 100, 10.10, 'ten')`),
 		},
-		NextRow{"(6, 60, 6.6, 'six')"},
-		NextRow{"(8, 80, 8.8, 'eight')"},
-		NextRow{"(10, 100, 10.10, 'ten')`)"},
-		Next{
-			eof: true,
-		},
-		Close{},
 		Commit{},
 	})
 
@@ -511,16 +536,13 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 		OpenTable{
 			tid: storage.EngineTableId + 1,
 		},
-		Rows{
+		Select{
 			maxRow: testutil.MustParseRow("(4, 0, 0, '')"),
+			rows: testutil.MustParseRows(`
+(0, 0, 0, 'zero'),
+(2, 20, 2.2, 'two'),
+(4, 40, 4.4, 'four')`),
 		},
-		NextRow{"(0, 0, 0, 'zero')"},
-		NextRow{"(2, 20, 2.2, 'two')"},
-		NextRow{"(4, 40, 4.4, 'four')"},
-		Next{
-			eof: true,
-		},
-		Close{},
 		Commit{},
 	})
 
@@ -528,17 +550,14 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 		OpenTable{
 			tid: storage.EngineTableId + 1,
 		},
-		Rows{
+		Select{
 			minRow: testutil.MustParseRow("(4, 0, 0, '')"),
 			maxRow: testutil.MustParseRow("(8, 0, 0, '')"),
+			rows: testutil.MustParseRows(`
+(4, 40, 4.4, 'four'),
+(6, 60, 6.6, 'six'),
+(8, 80, 8.8, 'eight')`),
 		},
-		NextRow{"(4, 40, 4.4, 'four')"},
-		NextRow{"(6, 60, 6.6, 'six')"},
-		NextRow{"(8, 80, 8.8, 'eight')"},
-		Next{
-			eof: true,
-		},
-		Close{},
 		Commit{},
 	})
 
@@ -546,17 +565,14 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 		OpenTable{
 			tid: storage.EngineTableId + 1,
 		},
-		Rows{
+		Select{
 			minRow: testutil.MustParseRow("(3, 0, 0, '')"),
 			maxRow: testutil.MustParseRow("(9, 0, 0, '')"),
+			rows: testutil.MustParseRows(`
+(4, 40, 4.4, 'four'),
+(6, 60, 6.6, 'six'),
+(8, 80, 8.8, 'eight')`),
 		},
-		NextRow{"(4, 40, 4.4, 'four')"},
-		NextRow{"(6, 60, 6.6, 'six')"},
-		NextRow{"(8, 80, 8.8, 'eight')"},
-		Next{
-			eof: true,
-		},
-		Close{},
 		Commit{},
 	})
 
@@ -564,19 +580,16 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 		OpenTable{
 			tid: storage.EngineTableId + 1,
 		},
-		Rows{
+		Select{
 			cols: []types.ColumnNum{3, 1},
+			rows: testutil.MustParseRows(`
+('zero', 0),
+('two', 20),
+('four', 40),
+('six', 60),
+('eight', 80),
+('ten', 100)`),
 		},
-		NextRow{"('zero', 0)"},
-		NextRow{"('two', 20)"},
-		NextRow{"('four', 40)"},
-		NextRow{"('six', 60)"},
-		NextRow{"('eight', 80)"},
-		NextRow{"('ten', 100)`)"},
-		Next{
-			eof: true,
-		},
-		Close{},
 		Commit{},
 	})
 
@@ -584,18 +597,12 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 		OpenTable{
 			tid: storage.EngineTableId + 1,
 		},
-		Rows{
+		Select{
 			cols:   []types.ColumnNum{3, 1},
 			minRow: testutil.MustParseRow("(3, 0, 0, '')"),
 			maxRow: testutil.MustParseRow("(9, 0, 0, '')"),
+			rows:   testutil.MustParseRows("('four', 40), ('six', 60), ('eight', 80)"),
 		},
-		NextRow{"('four', 40)"},
-		NextRow{"('six', 60)"},
-		NextRow{"('eight', 80)"},
-		Next{
-			eof: true,
-		},
-		Close{},
 		Commit{},
 	})
 
@@ -641,17 +648,15 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 		OpenTable{
 			tid: storage.EngineTableId + 2,
 		},
-		Rows{},
-		NextRow{`(1, true, 'true', '\x0102', 1.1, 1)`},
-		NextRow{`(2, true, 'abc', '\x01', 2.2, 2)`},
-		NextRow{`(3, false, '', '\x010203', 3.3, 3)`},
-		NextRow{`(4, false, 'abc', '\x0102', 1.1, 2)`},
-		NextRow{`(5, false, 'false', '\x01', 3.3, 1)`},
-		NextRow{`(6, true, 'true', '\x01', 2.2, 2)`},
-		Next{
-			eof: true,
+		Select{
+			rows: testutil.MustParseRows(`
+(1, true, 'true', '\x0102', 1.1, 1),
+(2, true, 'abc', '\x01', 2.2, 2),
+(3, false, '', '\x010203', 3.3, 3),
+(4, false, 'abc', '\x0102', 1.1, 2),
+(5, false, 'false', '\x01', 3.3, 1),
+(6, true, 'true', '\x01', 2.2, 2)`),
 		},
-		Close{},
 		Commit{},
 	})
 
@@ -659,19 +664,16 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 		OpenTable{
 			tid: storage.EngineTableId + 2,
 		},
-		Rows{
+		Select{
 			pred: equalPredicate{
 				col: 1,
 				b:   true,
 			},
+			rows: testutil.MustParseRows(`
+(1, true, 'true', '\x0102', 1.1, 1),
+(2, true, 'abc', '\x01', 2.2, 2),
+(6, true, 'true', '\x01', 2.2, 2)`),
 		},
-		NextRow{`(1, true, 'true', '\x0102', 1.1, 1)`},
-		NextRow{`(2, true, 'abc', '\x01', 2.2, 2)`},
-		NextRow{`(6, true, 'true', '\x01', 2.2, 2)`},
-		Next{
-			eof: true,
-		},
-		Close{},
 		Commit{},
 	})
 
@@ -679,18 +681,15 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 		OpenTable{
 			tid: storage.EngineTableId + 2,
 		},
-		Rows{
+		Select{
 			pred: equalPredicate{
 				col: 2,
 				s:   "abc",
 			},
+			rows: testutil.MustParseRows(`
+(2, true, 'abc', '\x01', 2.2, 2),
+(4, false, 'abc', '\x0102', 1.1, 2)`),
 		},
-		NextRow{`(2, true, 'abc', '\x01', 2.2, 2)`},
-		NextRow{`(4, false, 'abc', '\x0102', 1.1, 2)`},
-		Next{
-			eof: true,
-		},
-		Close{},
 		Commit{},
 	})
 
@@ -698,19 +697,16 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 		OpenTable{
 			tid: storage.EngineTableId + 2,
 		},
-		Rows{
+		Select{
 			pred: equalPredicate{
 				col:   3,
 				bytes: []byte{01},
 			},
+			rows: testutil.MustParseRows(`
+(2, true, 'abc', '\x01', 2.2, 2),
+(5, false, 'false', '\x01', 3.3, 1),
+(6, true, 'true', '\x01', 2.2, 2)`),
 		},
-		NextRow{`(2, true, 'abc', '\x01', 2.2, 2)`},
-		NextRow{`(5, false, 'false', '\x01', 3.3, 1)`},
-		NextRow{`(6, true, 'true', '\x01', 2.2, 2)`},
-		Next{
-			eof: true,
-		},
-		Close{},
 		Commit{},
 	})
 
@@ -718,18 +714,15 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 		OpenTable{
 			tid: storage.EngineTableId + 2,
 		},
-		Rows{
+		Select{
 			pred: equalPredicate{
 				col: 4,
 				f:   3.3,
 			},
+			rows: testutil.MustParseRows(`
+(3, false, '', '\x010203', 3.3, 3),
+(5, false, 'false', '\x01', 3.3, 1)`),
 		},
-		NextRow{`(3, false, '', '\x010203', 3.3, 3)`},
-		NextRow{`(5, false, 'false', '\x01', 3.3, 1)`},
-		Next{
-			eof: true,
-		},
-		Close{},
 		Commit{},
 	})
 
@@ -737,28 +730,24 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 		OpenTable{
 			tid: storage.EngineTableId + 2,
 		},
-		Rows{
+		Select{
 			pred: equalPredicate{
 				col: 5,
 				i:   2,
 			},
+			rows: testutil.MustParseRows(`
+(2, true, 'abc', '\x01', 2.2, 2),
+(4, false, 'abc', '\x0102', 1.1, 2),
+(6, true, 'true', '\x01', 2.2, 2)`),
 		},
-		NextRow{`(2, true, 'abc', '\x01', 2.2, 2)`},
-		NextRow{`(4, false, 'abc', '\x0102', 1.1, 2)`},
-		NextRow{`(6, true, 'true', '\x01', 2.2, 2)`},
-		Next{
-			eof: true,
-		},
-		Close{},
 		Commit{},
 	})
 
-	// XXX: pred, cols, minRow, maxRow
 	testStorage(t, st.Begin(), nil, []interface{}{
 		OpenTable{
 			tid: storage.EngineTableId + 2,
 		},
-		Rows{
+		Select{
 			cols:   []types.ColumnNum{4, 1, 0},
 			minRow: testutil.MustParseRow(`(2, true, 'abc', '\x01', 2.2, 2)`),
 			maxRow: testutil.MustParseRow(`(5, false, 'false', '\x01', 3.3, 1)`),
@@ -766,13 +755,149 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 				col: 5,
 				i:   2,
 			},
+			rows: testutil.MustParseRows("(2.2, true, 2), (1.1, false, 4)"),
 		},
-		NextRow{`(2.2, true, 2)`},
-		NextRow{`(1.1, false, 4)`},
-		Next{
-			eof: true,
+		Commit{},
+	})
+}
+
+func TestDelete(t *testing.T, store string, newStore NewStore) {
+	t.Helper()
+
+	st, err := newStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("%s.NewStore() failed with %s", store, err)
+	}
+
+	colNames := []types.Identifier{col1, col2, col3, col4}
+	colTypes := []types.ColumnType{
+		types.ColumnType{Type: types.Int64Type, Size: 4, NotNull: true},
+		types.ColumnType{Type: types.Int64Type, Size: 4, NotNull: true},
+		types.ColumnType{Type: types.Float64Type, NotNull: true},
+		types.StringColType,
+	}
+	primary := []types.ColumnKey{types.MakeColumnKey(0, false)}
+
+	testStorage(t, st.Begin(), nil, []interface{}{
+		CreateTable{
+			tid:      storage.EngineTableId + 1,
+			colNames: colNames,
+			colTypes: colTypes,
+			primary:  primary,
 		},
+		Commit{},
+	})
+
+	testStorage(t, st.Begin(), nil, []interface{}{
+		OpenTable{
+			tid: storage.EngineTableId + 1,
+		},
+		Insert{
+			rows: testutil.MustParseRows(`
+(0, 0, 0, 'zero'),
+(2, 20, 2.2, 'two'),
+(4, 40, 4.4, 'four'),
+(6, 60, 6.6, 'six'),
+(8, 80, 8.8, 'eight'),
+(10, 100, 10.10, 'ten')`),
+		},
+		Commit{},
+	})
+
+	testStorage(t, st.Begin(), nil, []interface{}{
+		OpenTable{
+			tid: storage.EngineTableId + 1,
+		},
+		Rows{},
+		Next{row: testutil.MustParseRow("(0, 0, 0, 'zero')")},
+		Next{row: testutil.MustParseRow("(2, 20, 2.2, 'two')")},
+		Current{},
+		Delete{},
 		Close{},
 		Commit{},
+	})
+
+	testStorage(t, st.Begin(), nil, []interface{}{
+		OpenTable{
+			tid: storage.EngineTableId + 1,
+		},
+		Select{
+			rows: testutil.MustParseRows(`
+(0, 0, 0, 'zero'),
+(4, 40, 4.4, 'four'),
+(6, 60, 6.6, 'six'),
+(8, 80, 8.8, 'eight'),
+(10, 100, 10.10, 'ten')`),
+		},
+		Rows{},
+		Next{row: testutil.MustParseRow("(0, 0, 0, 'zero')")},
+		Next{row: testutil.MustParseRow("(4, 40, 4.4, 'four')")},
+		Next{row: testutil.MustParseRow("(6, 60, 6.6, 'six')")},
+		Current{},
+		Close{},
+		Delete{},
+		Select{
+			rows: testutil.MustParseRows(`
+(0, 0, 0, 'zero'),
+(4, 40, 4.4, 'four'),
+(8, 80, 8.8, 'eight'),
+(10, 100, 10.10, 'ten')`),
+		},
+		Commit{},
+	})
+
+	testStorage(t, st.Begin(), nil, []interface{}{
+		OpenTable{
+			tid: storage.EngineTableId + 1,
+		},
+		Select{
+			rows: testutil.MustParseRows(`
+(0, 0, 0, 'zero'),
+(4, 40, 4.4, 'four'),
+(8, 80, 8.8, 'eight'),
+(10, 100, 10.10, 'ten')`),
+		},
+		Rows{},
+		Next{row: testutil.MustParseRow("(0, 0, 0, 'zero')")},
+		Next{row: testutil.MustParseRow("(4, 40, 4.4, 'four')")},
+		Current{},
+		Delete{},
+		Close{},
+		Select{
+			rows: testutil.MustParseRows(`
+(0, 0, 0, 'zero'),
+(8, 80, 8.8, 'eight'),
+(10, 100, 10.10, 'ten')`),
+		},
+		Rollback{},
+	})
+
+	testStorage(t, st.Begin(), nil, []interface{}{
+		OpenTable{
+			tid: storage.EngineTableId + 1,
+		},
+		Select{
+			rows: testutil.MustParseRows(`
+(0, 0, 0, 'zero'),
+(4, 40, 4.4, 'four'),
+(8, 80, 8.8, 'eight'),
+(10, 100, 10.10, 'ten')`),
+		},
+		Rollback{},
+	})
+
+	testStorage(t, st.Begin(), nil, []interface{}{
+		OpenTable{
+			tid: storage.EngineTableId + 1,
+		},
+		Rows{},
+		Next{row: testutil.MustParseRow("(0, 0, 0, 'zero')")},
+		Current{},
+		Delete{},
+		Delete{
+			panicked: true,
+		},
+		Close{},
+		Rollback{},
 	})
 }

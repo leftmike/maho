@@ -135,14 +135,14 @@ type Rows struct {
 }
 
 type Update struct {
-	rid  storage.RowId
 	cols []types.ColumnNum
 	vals []types.Value
 	fail bool
 }
+
 type Delete struct {
-	rid  storage.RowId
-	fail bool
+	fail     bool
+	panicked bool
 }
 
 type Insert struct {
@@ -151,13 +151,10 @@ type Insert struct {
 }
 
 type Next struct {
+	row      types.Row
 	fail     bool
 	eof      bool
 	panicked bool
-}
-
-type NextRow struct {
-	row string
 }
 
 type Current struct {
@@ -170,7 +167,16 @@ type Close struct {
 	panicked bool
 }
 
-// XXX: add ways to call Select, UpdateSet, DeleteFrom
+type Select struct {
+	cols      []types.ColumnNum
+	minRow    types.Row
+	maxRow    types.Row
+	pred      storage.Predicate
+	rows      []types.Row
+	unordered bool
+}
+
+// XXX: add ways to call UpdateSet, DeleteFrom
 
 func testStorage(t *testing.T, tx storage.Transaction, tbl storage.Table,
 	cases []interface{}) storage.Table {
@@ -323,8 +329,16 @@ func testStorage(t *testing.T, tx storage.Transaction, tbl storage.Table,
 				t.Errorf("%d.Update() failed with %s", tbl.TID(), err)
 			}
 		case Delete:
-			err := tbl.Delete(ctx, rid)
-			if c.fail {
+			err, panicked := errorPanicked(func() error {
+				return tbl.Delete(ctx, rid)
+			})
+			if panicked {
+				if !c.panicked {
+					t.Errorf("%d.Delete() panicked", tbl.TID())
+				}
+			} else if c.panicked {
+				t.Errorf("%d.Delete() did not panic", tbl.TID())
+			} else if c.fail {
 				if err == nil {
 					t.Errorf("%d.Delete() did not fail", tbl.TID())
 				}
@@ -362,22 +376,8 @@ func testStorage(t *testing.T, tx storage.Transaction, tbl storage.Table,
 						t.Errorf("Rows(%d).Next() did not return io.EOF: %s", tbl.TID(), row)
 					}
 				}
-			} else {
-				t.Fatalf("Rows(%d).Next() test must set one of panicked, fail, or eof", tbl.TID())
-			}
-		case NextRow:
-			row, err, panicked := rowErrorPanicked(func() (types.Row, error) {
-				return rows.Next(ctx)
-			})
-			if panicked {
-				t.Errorf("Rows(%d).Next() panicked", tbl.TID())
-			} else if err != nil {
-				t.Errorf("Rows(%d).Next() failed with %s", tbl.TID(), err)
-			} else {
-				wantRow := testutil.MustParseRow(c.row)
-				if testutil.CompareRows(row, wantRow) != 0 {
-					t.Errorf("Rows(%d).Next() got %s want %s", tbl.TID(), row, wantRow)
-				}
+			} else if testutil.CompareRows(row, c.row) != 0 {
+				t.Errorf("Rows(%d).Next() got %s want %s", tbl.TID(), row, c.row)
 			}
 		case Current:
 			var panicked bool
@@ -413,6 +413,35 @@ func testStorage(t *testing.T, tx storage.Transaction, tbl storage.Table,
 				}
 			} else if err != nil {
 				t.Errorf("Rows(%d).Close() failed with %s", tbl.TID(), err)
+			}
+		case Select:
+			rs, err := tbl.Rows(ctx, c.cols, c.minRow, c.maxRow, c.pred)
+			if err != nil {
+				t.Errorf("Select(%d).Rows() failed with %s", tbl.TID(), err)
+				break
+			}
+
+			var rows []types.Row
+			for {
+				row, err := rs.Next(ctx)
+				if err == io.EOF {
+					break
+				} else if err != nil {
+					t.Errorf("Select(%d).Next() failed with %s", tbl.TID(), err)
+					break
+				}
+
+				rows = append(rows, row)
+			}
+
+			if !testutil.RowsEqual(rows, c.rows, c.unordered) {
+				t.Errorf("Select(%d) got %s want %s", tbl.TID(), testutil.FormatRows(rows, ",\n"),
+					testutil.FormatRows(c.rows, ",\n"))
+			}
+
+			err = rs.Close(ctx)
+			if err != nil {
+				t.Errorf("Select(%d).Close() failed with %s", tbl.TID(), err)
 			}
 		}
 	}

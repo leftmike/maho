@@ -29,7 +29,7 @@ func toRelationId(tid storage.TableId, iid storage.IndexId) relationId {
 	return relationId(uint64(tid)<<32 | uint64(iid))
 }
 
-func toItem(rel relationId, rowKey []types.ColumnKey,
+func rowToItem(rel relationId, rowKey []types.ColumnKey,
 	row types.Row) item {
 
 	it := item{
@@ -42,8 +42,19 @@ func toItem(rel relationId, rowKey []types.ColumnKey,
 	return it
 }
 
+func rowIdToItem(rel relationId, rid storage.RowId) item {
+	return item{
+		rel: rel,
+		key: rid.([]byte),
+	}
+}
+
 func (it item) String() string {
 	return fmt.Sprintf("%d:%d %v %s", it.rel>>32, it.rel&0xFFFFFFFF, it.key, it.row)
+}
+
+func (it item) RowId() storage.RowId {
+	return it.key
 }
 
 func newBTree() *btree.BTreeG[item] {

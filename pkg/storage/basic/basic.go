@@ -75,7 +75,7 @@ var (
 )
 
 func (tx *transaction) getTableType(tid storage.TableId) *tableType {
-	it := toItem(tableTypesRelation, tableTypesKey, types.Row{types.Int64Value(tid)})
+	it := rowToItem(tableTypesRelation, tableTypesKey, types.Row{types.Int64Value(tid)})
 	it, ok := tx.tree.Get(it)
 	if !ok {
 		return nil
@@ -102,13 +102,13 @@ func (tx *transaction) setTableType(tid storage.TableId, tt *tableType) {
 		panic(fmt.Sprintf("basic: unable able encode type table: %s", err))
 	}
 
-	it := toItem(tableTypesRelation, tableTypesKey,
+	it := rowToItem(tableTypesRelation, tableTypesKey,
 		types.Row{types.Int64Value(tid), types.BytesValue(buf.Bytes())})
 	tx.tree.ReplaceOrInsert(it)
 }
 
 func (tx *transaction) deleteTableType(tid storage.TableId) bool {
-	it := toItem(tableTypesRelation, tableTypesKey, types.Row{types.Int64Value(tid)})
+	it := rowToItem(tableTypesRelation, tableTypesKey, types.Row{types.Int64Value(tid)})
 	_, ok := tx.tree.Delete(it)
 	return ok
 }
@@ -284,7 +284,7 @@ func (tbl *table) Rows(ctx context.Context, cols []types.ColumnNum, minRow, maxR
 
 	var maxItem item
 	if maxRow != nil {
-		maxItem = toItem(rel, tbl.tt.Primary, maxRow)
+		maxItem = rowToItem(rel, tbl.tt.Primary, maxRow)
 	}
 
 	var predFn func(types.Value) bool
@@ -295,7 +295,7 @@ func (tbl *table) Rows(ctx context.Context, cols []types.ColumnNum, minRow, maxR
 	}
 
 	var items []item
-	tbl.tx.tree.AscendGreaterOrEqual(toItem(rel, tbl.tt.Primary, minRow),
+	tbl.tx.tree.AscendGreaterOrEqual(rowToItem(rel, tbl.tt.Primary, minRow),
 		func(it item) bool {
 			if it.rel != rel {
 				return false
@@ -328,20 +328,27 @@ func (tbl *table) Update(ctx context.Context, rid storage.RowId, cols []types.Co
 }
 
 func (tbl *table) Delete(ctx context.Context, rid storage.RowId) error {
-	// XXX
+	tbl.tx.forWrite()
+
+	_, ok := tbl.tx.tree.Delete(rowIdToItem(toRelationId(tbl.tid, primaryIndexId), rid))
+	if !ok {
+		panic(fmt.Sprintf("basic: table %d: missing item to delete: %v", tbl.tid, rid))
+	}
+
 	return nil
 }
 
 func (tbl *table) Insert(ctx context.Context, rows []types.Row) error {
 	tbl.tx.forWrite()
 
+	rel := toRelationId(tbl.tid, primaryIndexId)
 	for _, row := range rows {
 		row, err := types.ConvertRow(tbl.tt.ColumnTypes, row)
 		if err != nil {
 			return err
 		}
 
-		it := toItem(toRelationId(tbl.tid, primaryIndexId), tbl.tt.Primary, row)
+		it := rowToItem(rel, tbl.tt.Primary, row)
 		if tbl.tx.tree.Has(it) {
 			return fmt.Errorf("basic: %s: primary index: existing row with duplicate key: %s",
 				tbl.tt.Name, row)
@@ -379,7 +386,7 @@ func (rs *rows) Current() (storage.RowId, error) {
 		panic(fmt.Sprintf("basic: missing current on rows for table %d", rs.tbl.tid))
 	}
 
-	return rs.items[rs.next-1].key, nil
+	return rs.items[rs.next-1].RowId(), nil
 }
 
 func (rs *rows) Close(ctx context.Context) error {

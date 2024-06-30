@@ -16,6 +16,7 @@ func TestStore(t *testing.T) {
 	test.TestStore(t, "basic", newStore)
 	test.TestCreateTable(t, "basic", newStore)
 	test.TestDropTable(t, "basic", newStore)
-	test.TestInsert(t, "basic", newStore)
 	test.TestRows(t, "basic", newStore)
+	test.TestInsert(t, "basic", newStore)
+	test.TestDelete(t, "basic", newStore)
 }
