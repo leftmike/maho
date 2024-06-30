@@ -19,4 +19,5 @@ func TestStore(t *testing.T) {
 	test.TestRows(t, "basic", newStore)
 	test.TestInsert(t, "basic", newStore)
 	test.TestDelete(t, "basic", newStore)
+	test.TestUpdate(t, "basic", newStore)
 }

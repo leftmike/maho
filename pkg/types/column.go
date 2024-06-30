@@ -98,3 +98,15 @@ func (ck ColumnKey) Column() ColumnNum {
 	}
 	return ColumnNum(ck - 1)
 }
+
+func ColumnKeyUpdated(colKey []ColumnKey, cols []ColumnNum) bool {
+	for _, ck := range colKey {
+		for _, col := range cols {
+			if col == ck.Column() {
+				return true
+			}
+		}
+	}
+
+	return false
+}

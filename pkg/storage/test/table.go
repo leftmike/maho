@@ -901,3 +901,168 @@ func TestDelete(t *testing.T, store string, newStore NewStore) {
 		Rollback{},
 	})
 }
+
+func TestUpdate(t *testing.T, store string, newStore NewStore) {
+	t.Helper()
+
+	st, err := newStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("%s.NewStore() failed with %s", store, err)
+	}
+
+	colNames := []types.Identifier{col1, col2, col3, col4}
+	colTypes := []types.ColumnType{
+		types.ColumnType{Type: types.Int64Type, Size: 4, NotNull: true},
+		types.ColumnType{Type: types.Int64Type, Size: 4, NotNull: true},
+		types.ColumnType{Type: types.Float64Type, NotNull: true},
+		types.StringColType,
+	}
+	primary := []types.ColumnKey{types.MakeColumnKey(0, false)}
+
+	testStorage(t, st.Begin(), nil, []interface{}{
+		CreateTable{
+			tid:      storage.EngineTableId + 1,
+			colNames: colNames,
+			colTypes: colTypes,
+			primary:  primary,
+		},
+		Commit{},
+	})
+
+	testStorage(t, st.Begin(), nil, []interface{}{
+		OpenTable{
+			tid: storage.EngineTableId + 1,
+		},
+		Insert{
+			rows: testutil.MustParseRows(`
+(0, 0, 0, 'zero'),
+(2, 20, 2.2, 'two'),
+(4, 40, 4.4, 'four'),
+(6, 60, 6.6, 'six')`),
+		},
+		Commit{},
+	})
+
+	testStorage(t, st.Begin(), nil, []interface{}{
+		OpenTable{
+			tid: storage.EngineTableId + 1,
+		},
+		Rows{},
+		Next{row: testutil.MustParseRow("(0, 0, 0, 'zero')")},
+		Next{row: testutil.MustParseRow("(2, 20, 2.2, 'two')")},
+		Current{},
+		Update{
+			cols: []types.ColumnNum{3, 1},
+			vals: []types.Value{types.StringValue("two two"), types.Int64Value(200)},
+		},
+		Close{},
+		Commit{},
+	})
+
+	testStorage(t, st.Begin(), nil, []interface{}{
+		OpenTable{
+			tid: storage.EngineTableId + 1,
+		},
+		Select{
+			rows: testutil.MustParseRows(`
+(0, 0, 0, 'zero'),
+(2, 200, 2.2, 'two two'),
+(4, 40, 4.4, 'four'),
+(6, 60, 6.6, 'six')`),
+		},
+		Rows{},
+		Next{row: testutil.MustParseRow("(0, 0, 0, 'zero')")},
+		Next{row: testutil.MustParseRow("(2, 200, 2.2, 'two two')")},
+		Next{row: testutil.MustParseRow("(4, 40, 4.4, 'four')")},
+		Current{},
+		Close{},
+		Update{
+			cols: []types.ColumnNum{0, 2},
+			vals: []types.Value{types.Int64Value(1), types.Float64Value(8.8)},
+		},
+		Select{
+			rows: testutil.MustParseRows(`
+(0, 0, 0, 'zero'),
+(1, 40, 8.8, 'four'),
+(2, 200, 2.2, 'two two'),
+(6, 60, 6.6, 'six')`),
+		},
+		Commit{},
+	})
+
+	testStorage(t, st.Begin(), nil, []interface{}{
+		OpenTable{
+			tid: storage.EngineTableId + 1,
+		},
+		Select{
+			rows: testutil.MustParseRows(`
+(0, 0, 0, 'zero'),
+(1, 40, 8.8, 'four'),
+(2, 200, 2.2, 'two two'),
+(6, 60, 6.6, 'six')`),
+		},
+		Rows{},
+		Next{row: testutil.MustParseRow("(0, 0, 0, 'zero')")},
+		Next{row: testutil.MustParseRow("(1, 40, 8.8, 'four')")},
+		Current{},
+		Update{
+			cols: []types.ColumnNum{1},
+			vals: []types.Value{types.Int64Value(400)},
+		},
+		Close{},
+		Select{
+			rows: testutil.MustParseRows(`
+(0, 0, 0, 'zero'),
+(1, 400, 8.8, 'four'),
+(2, 200, 2.2, 'two two'),
+(6, 60, 6.6, 'six')`),
+		},
+		Rollback{},
+	})
+
+	testStorage(t, st.Begin(), nil, []interface{}{
+		OpenTable{
+			tid: storage.EngineTableId + 1,
+		},
+		Select{
+			rows: testutil.MustParseRows(`
+(0, 0, 0, 'zero'),
+(1, 40, 8.8, 'four'),
+(2, 200, 2.2, 'two two'),
+(6, 60, 6.6, 'six')`),
+		},
+		Rollback{},
+	})
+
+	testStorage(t, st.Begin(), nil, []interface{}{
+		OpenTable{
+			tid: storage.EngineTableId + 1,
+		},
+		Rows{},
+		Next{row: testutil.MustParseRow("(0, 0, 0, 'zero')")},
+		Current{},
+		Update{
+			cols:     []types.ColumnNum{1, 2},
+			vals:     []types.Value{types.Int64Value(100)},
+			panicked: true,
+		},
+		Close{},
+		Rollback{},
+	})
+
+	testStorage(t, st.Begin(), nil, []interface{}{
+		OpenTable{
+			tid: storage.EngineTableId + 1,
+		},
+		Rows{},
+		Next{row: testutil.MustParseRow("(0, 0, 0, 'zero')")},
+		Current{},
+		Update{
+			cols: []types.ColumnNum{0},
+			vals: []types.Value{types.Int64Value(1)},
+			fail: true,
+		},
+		Close{},
+		Rollback{},
+	})
+}

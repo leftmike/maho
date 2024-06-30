@@ -135,9 +135,10 @@ type Rows struct {
 }
 
 type Update struct {
-	cols []types.ColumnNum
-	vals []types.Value
-	fail bool
+	cols     []types.ColumnNum
+	vals     []types.Value
+	fail     bool
+	panicked bool
 }
 
 type Delete struct {
@@ -176,7 +177,18 @@ type Select struct {
 	unordered bool
 }
 
-// XXX: add ways to call UpdateSet, DeleteFrom
+type DeleteFrom struct { // XXX
+	minRow types.Row
+	maxRow types.Row
+	pred   storage.Predicate
+}
+
+type UpdateSet struct { // XXX
+	minRow types.Row
+	maxRow types.Row
+	pred   storage.Predicate
+	update func(row types.Row) ([]types.ColumnNum, []types.Value)
+}
 
 func testStorage(t *testing.T, tx storage.Transaction, tbl storage.Table,
 	cases []interface{}) storage.Table {
@@ -320,8 +332,16 @@ func testStorage(t *testing.T, tx storage.Transaction, tbl storage.Table,
 				t.Errorf("%d.Rows() failed with %s", tbl.TID(), err)
 			}
 		case Update:
-			err := tbl.Update(ctx, rid, c.cols, c.vals)
-			if c.fail {
+			err, panicked := errorPanicked(func() error {
+				return tbl.Update(ctx, rid, c.cols, c.vals)
+			})
+			if panicked {
+				if !c.panicked {
+					t.Errorf("%d.Update() panicked", tbl.TID())
+				}
+			} else if c.panicked {
+				t.Errorf("%d.Update() did not panic", tbl.TID())
+			} else if c.fail {
 				if err == nil {
 					t.Errorf("%d.Update() did not fail", tbl.TID())
 				}

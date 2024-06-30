@@ -323,7 +323,36 @@ func (tbl *table) Rows(ctx context.Context, cols []types.ColumnNum, minRow, maxR
 func (tbl *table) Update(ctx context.Context, rid storage.RowId, cols []types.ColumnNum,
 	vals []types.Value) error {
 
-	// XXX
+	if len(cols) != len(vals) {
+		panic(fmt.Sprintf("basic: table %d: update len(cols) != len(vals): %d %d", tbl.tid,
+			len(cols), len(vals)))
+	}
+
+	it, ok := tbl.tx.tree.Get(rowIdToItem(toRelationId(tbl.tid, primaryIndexId), rid))
+	if !ok {
+		panic(fmt.Sprintf("basic: table %d: missing item to update: %v", tbl.tid, rid))
+	}
+	row := append(make([]types.Value, 0, len(it.row)), it.row...)
+	for idx, col := range cols {
+		row[col] = vals[idx]
+	}
+
+	tbl.tx.forWrite()
+
+	if types.ColumnKeyUpdated(tbl.tt.Primary, cols) {
+		err := tbl.Delete(ctx, rid)
+		if err != nil {
+			return err
+		}
+		err = tbl.Insert(ctx, []types.Row{row})
+		if err != nil {
+			return err
+		}
+	} else {
+		tbl.tx.tree.ReplaceOrInsert(
+			rowToItem(toRelationId(tbl.tid, primaryIndexId), tbl.tt.Primary, row))
+	}
+
 	return nil
 }
 
