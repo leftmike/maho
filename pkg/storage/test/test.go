@@ -177,17 +177,51 @@ type Select struct {
 	unordered bool
 }
 
-type DeleteFrom struct { // XXX
+type DeleteFrom struct {
 	minRow types.Row
 	maxRow types.Row
 	pred   storage.Predicate
 }
 
-type UpdateSet struct { // XXX
+type UpdateSet struct {
 	minRow types.Row
 	maxRow types.Row
 	pred   storage.Predicate
 	update func(row types.Row) ([]types.ColumnNum, []types.Value)
+}
+
+func selectFunc(t *testing.T, what string, tbl storage.Table, cols []types.ColumnNum,
+	minRow, maxRow types.Row, pred storage.Predicate,
+	fn func(rid storage.RowId, row types.Row)) {
+
+	ctx := context.Background()
+
+	rs, err := tbl.Rows(ctx, cols, minRow, maxRow, pred)
+	if err != nil {
+		t.Errorf("%s(%d).Rows() failed with %s", what, tbl.TID(), err)
+		return
+	}
+
+	for {
+		row, err := rs.Next(ctx)
+		if err == io.EOF {
+			break
+		} else if err != nil {
+			t.Errorf("%s(%d).Next() failed with %s", what, tbl.TID(), err)
+			break
+		}
+		rid, err := rs.Current()
+		if err != nil {
+			t.Errorf("%s(%d).Current() failed with %s", what, tbl.TID(), err)
+			break
+		}
+		fn(rid, row)
+	}
+
+	err = rs.Close(ctx)
+	if err != nil {
+		t.Errorf("%s(%d).Close() failed with %s", what, tbl.TID(), err)
+	}
 }
 
 func testStorage(t *testing.T, tx storage.Transaction, tbl storage.Table,
@@ -243,8 +277,6 @@ func testStorage(t *testing.T, tx storage.Transaction, tbl storage.Table,
 				t.Errorf("DropTable(%d) failed with %s", c.tid, err)
 			}
 		case TableType:
-			// tbl must be valid
-
 			tid := tbl.TID()
 			if tid != c.tid {
 				t.Errorf("%d.TID() got %d want %d", c.tid, tid, c.tid)
@@ -435,34 +467,33 @@ func testStorage(t *testing.T, tx storage.Transaction, tbl storage.Table,
 				t.Errorf("Rows(%d).Close() failed with %s", tbl.TID(), err)
 			}
 		case Select:
-			rs, err := tbl.Rows(ctx, c.cols, c.minRow, c.maxRow, c.pred)
-			if err != nil {
-				t.Errorf("Select(%d).Rows() failed with %s", tbl.TID(), err)
-				break
-			}
-
 			var rows []types.Row
-			for {
-				row, err := rs.Next(ctx)
-				if err == io.EOF {
-					break
-				} else if err != nil {
-					t.Errorf("Select(%d).Next() failed with %s", tbl.TID(), err)
-					break
-				}
-
-				rows = append(rows, row)
-			}
+			selectFunc(t, "Select", tbl, c.cols, c.minRow, c.maxRow, c.pred,
+				func(rid storage.RowId, row types.Row) {
+					rows = append(rows, row)
+				})
 
 			if !testutil.RowsEqual(rows, c.rows, c.unordered) {
 				t.Errorf("Select(%d) got %s want %s", tbl.TID(), testutil.FormatRows(rows, ",\n"),
 					testutil.FormatRows(c.rows, ",\n"))
 			}
-
-			err = rs.Close(ctx)
-			if err != nil {
-				t.Errorf("Select(%d).Close() failed with %s", tbl.TID(), err)
-			}
+		case DeleteFrom:
+			selectFunc(t, "DeleteFrom", tbl, nil, c.minRow, c.maxRow, c.pred,
+				func(rid storage.RowId, row types.Row) {
+					err := tbl.Delete(ctx, rid)
+					if err != nil {
+						t.Errorf("DeleteFrom(%d).Delete() failed with %s", tbl.TID(), err)
+					}
+				})
+		case UpdateSet:
+			selectFunc(t, "UpdateSet", tbl, nil, c.minRow, c.maxRow, c.pred,
+				func(rid storage.RowId, row types.Row) {
+					cols, vals := c.update(row)
+					err := tbl.Update(ctx, rid, cols, vals)
+					if err != nil {
+						t.Errorf("UpdateSet(%d).Update() failed with %s", tbl.TID(), err)
+					}
+				})
 		}
 	}
 

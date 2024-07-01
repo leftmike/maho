@@ -20,4 +20,5 @@ func TestStore(t *testing.T) {
 	test.TestInsert(t, "basic", newStore)
 	test.TestDelete(t, "basic", newStore)
 	test.TestUpdate(t, "basic", newStore)
+	test.TestTable(t, "basic", newStore)
 }

@@ -344,37 +344,37 @@ func TestInsert(t *testing.T, store string, newStore NewStore) {
 	})
 }
 
-type equalPredicate struct {
-	col   types.ColumnNum
-	b     bool
-	s     string
-	bytes []byte
-	f     float64
-	i     int64
+type predicateFunc struct {
+	col         types.ColumnNum
+	boolPred    func(b types.BoolValue) bool
+	stringPred  func(s types.StringValue) bool
+	bytesPred   func(b types.BytesValue) bool
+	float64Pred func(f types.Float64Value) bool
+	int64Pred   func(i types.Int64Value) bool
 }
 
-func (ep equalPredicate) Column() types.ColumnNum {
-	return ep.col
+func (pf predicateFunc) Column() types.ColumnNum {
+	return pf.col
 }
 
-func (ep equalPredicate) BoolPred(b types.BoolValue) bool {
-	return ep.b == bool(b)
+func (pf predicateFunc) BoolPred(b types.BoolValue) bool {
+	return pf.boolPred(b)
 }
 
-func (ep equalPredicate) StringPred(s types.StringValue) bool {
-	return ep.s == string(s)
+func (pf predicateFunc) StringPred(s types.StringValue) bool {
+	return pf.stringPred(s)
 }
 
-func (ep equalPredicate) BytesPred(b types.BytesValue) bool {
-	return bytes.Compare(ep.bytes, b) == 0
+func (pf predicateFunc) BytesPred(b types.BytesValue) bool {
+	return pf.bytesPred(b)
 }
 
-func (ep equalPredicate) Float64Pred(f types.Float64Value) bool {
-	return ep.f == float64(f)
+func (pf predicateFunc) Float64Pred(f types.Float64Value) bool {
+	return pf.float64Pred(f)
 }
 
-func (ep equalPredicate) Int64Pred(i types.Int64Value) bool {
-	return ep.i == int64(i)
+func (pf predicateFunc) Int64Pred(i types.Int64Value) bool {
+	return pf.int64Pred(i)
 }
 
 func TestRows(t *testing.T, store string, newStore NewStore) {
@@ -665,9 +665,9 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 			tid: storage.EngineTableId + 2,
 		},
 		Select{
-			pred: equalPredicate{
-				col: 1,
-				b:   true,
+			pred: predicateFunc{
+				col:      1,
+				boolPred: func(b types.BoolValue) bool { return b == true },
 			},
 			rows: testutil.MustParseRows(`
 (1, true, 'true', '\x0102', 1.1, 1),
@@ -682,9 +682,9 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 			tid: storage.EngineTableId + 2,
 		},
 		Select{
-			pred: equalPredicate{
-				col: 2,
-				s:   "abc",
+			pred: predicateFunc{
+				col:        2,
+				stringPred: func(s types.StringValue) bool { return s == "abc" },
 			},
 			rows: testutil.MustParseRows(`
 (2, true, 'abc', '\x01', 2.2, 2),
@@ -698,9 +698,11 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 			tid: storage.EngineTableId + 2,
 		},
 		Select{
-			pred: equalPredicate{
-				col:   3,
-				bytes: []byte{01},
+			pred: predicateFunc{
+				col: 3,
+				bytesPred: func(b types.BytesValue) bool {
+					return bytes.Compare(b, []byte{01}) == 0
+				},
 			},
 			rows: testutil.MustParseRows(`
 (2, true, 'abc', '\x01', 2.2, 2),
@@ -715,9 +717,9 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 			tid: storage.EngineTableId + 2,
 		},
 		Select{
-			pred: equalPredicate{
-				col: 4,
-				f:   3.3,
+			pred: predicateFunc{
+				col:         4,
+				float64Pred: func(f types.Float64Value) bool { return f == 3.3 },
 			},
 			rows: testutil.MustParseRows(`
 (3, false, '', '\x010203', 3.3, 3),
@@ -731,9 +733,9 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 			tid: storage.EngineTableId + 2,
 		},
 		Select{
-			pred: equalPredicate{
-				col: 5,
-				i:   2,
+			pred: predicateFunc{
+				col:       5,
+				int64Pred: func(i types.Int64Value) bool { return i == 2 },
 			},
 			rows: testutil.MustParseRows(`
 (2, true, 'abc', '\x01', 2.2, 2),
@@ -751,9 +753,9 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 			cols:   []types.ColumnNum{4, 1, 0},
 			minRow: testutil.MustParseRow(`(2, true, 'abc', '\x01', 2.2, 2)`),
 			maxRow: testutil.MustParseRow(`(5, false, 'false', '\x01', 3.3, 1)`),
-			pred: equalPredicate{
-				col: 5,
-				i:   2,
+			pred: predicateFunc{
+				col:       5,
+				int64Pred: func(i types.Int64Value) bool { return i == 2 },
 			},
 			rows: testutil.MustParseRows("(2.2, true, 2), (1.1, false, 4)"),
 		},
@@ -1064,5 +1066,127 @@ func TestUpdate(t *testing.T, store string, newStore NewStore) {
 		},
 		Close{},
 		Rollback{},
+	})
+}
+
+func TestTable(t *testing.T, store string, newStore NewStore) {
+	t.Helper()
+
+	st, err := newStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("%s.NewStore() failed with %s", store, err)
+	}
+
+	colNames := []types.Identifier{col1, col2, col3, col4}
+	colTypes := []types.ColumnType{
+		types.ColumnType{Type: types.Int64Type, Size: 4},
+		types.ColumnType{Type: types.BoolType},
+		types.ColumnType{Type: types.StringType, Size: 1024},
+		types.ColumnType{Type: types.Int64Type, Size: 4},
+	}
+	primary := []types.ColumnKey{types.MakeColumnKey(0, false)}
+
+	testStorage(t, st.Begin(), nil, []interface{}{
+		CreateTable{
+			tid:      storage.EngineTableId + 1,
+			colNames: colNames,
+			colTypes: colTypes,
+			primary:  primary,
+		},
+		Commit{},
+	})
+
+	var rows []types.Row
+	for n := 1; n < 20; n++ {
+		rows = append(rows,
+			[]types.Value{
+				types.Int64Value(n),
+				types.BoolValue(n%2 == 0),
+				types.StringValue(""),
+				types.Int64Value(n),
+			})
+	}
+
+	testStorage(t, st.Begin(), nil, []interface{}{
+		OpenTable{
+			tid: storage.EngineTableId + 1,
+		},
+		Insert{
+			rows: rows,
+		},
+		Commit{},
+	})
+
+	testStorage(t, st.Begin(), nil, []interface{}{
+		OpenTable{
+			tid: storage.EngineTableId + 1,
+		},
+		Select{
+			rows: rows,
+		},
+		Commit{},
+	})
+
+	testStorage(t, st.Begin(), nil, []interface{}{
+		OpenTable{
+			tid: storage.EngineTableId + 1,
+		},
+		UpdateSet{
+			pred: predicateFunc{
+				col:      1,
+				boolPred: func(b types.BoolValue) bool { return b == true },
+			},
+			update: func(row types.Row) ([]types.ColumnNum, []types.Value) {
+				return []types.ColumnNum{3}, []types.Value{-(row[3].(types.Int64Value))}
+			},
+		},
+		Commit{},
+	})
+
+	for _, row := range rows {
+		if row[1].(types.BoolValue) == true {
+			row[3] = -(row[3].(types.Int64Value))
+		}
+	}
+
+	testStorage(t, st.Begin(), nil, []interface{}{
+		OpenTable{
+			tid: storage.EngineTableId + 1,
+		},
+		Select{
+			rows: rows,
+		},
+		Commit{},
+	})
+
+	testStorage(t, st.Begin(), nil, []interface{}{
+		OpenTable{
+			tid: storage.EngineTableId + 1,
+		},
+		DeleteFrom{
+			pred: predicateFunc{
+				col:      1,
+				boolPred: func(b types.BoolValue) bool { return b == false },
+			},
+		},
+		Commit{},
+	})
+
+	var nrows []types.Row
+	for _, row := range rows {
+		if row[1].(types.BoolValue) == true {
+			nrows = append(nrows, row)
+		}
+	}
+	rows = nrows
+
+	testStorage(t, st.Begin(), nil, []interface{}{
+		OpenTable{
+			tid: storage.EngineTableId + 1,
+		},
+		Select{
+			rows: rows,
+		},
+		Commit{},
 	})
 }

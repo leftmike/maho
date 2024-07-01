@@ -60,10 +60,3 @@ func (it item) RowId() storage.RowId {
 func newBTree() *btree.BTreeG[item] {
 	return btree.NewG[item](8, lessItems)
 }
-
-// XXX: Clone
-// XXX: AscendGreaterOrEqual
-// XXX: Has
-// XXX: ReplaceOrInsert
-// XXX: Delete
-// XXX: Get
