@@ -8,46 +8,46 @@ import (
 
 func TestName(t *testing.T) {
 	tn := types.TableName{
-		Database: types.ID("database", false),
-		Schema:   types.ID("schema", false),
-		Table:    types.ID("table", false),
+		Database: types.ID("db", false),
+		Schema:   types.ID("scm", false),
+		Table:    types.ID("tbl", false),
 	}
 
 	s := tn.String()
-	if s != "database.schema.table" {
-		t.Errorf("%#v.String() got %s want database.schema.table", tn, s)
+	if s != "db.scm.tbl" {
+		t.Errorf("%#v.String() got %s want db.scm.tbl", tn, s)
 	}
 
 	sn := tn.SchemaName()
 	s = sn.String()
 
-	if s != "database.schema" {
-		t.Errorf("%#v.String() got %s want database.schema", sn, s)
+	if s != "db.scm" {
+		t.Errorf("%#v.String() got %s want db.scm", sn, s)
 	}
 
 	tn = types.TableName{
-		Schema: types.ID("schema", false),
-		Table:  types.ID("table", false),
+		Schema: types.ID("scm", false),
+		Table:  types.ID("tbl", false),
 	}
 
 	s = tn.String()
-	if s != "schema.table" {
-		t.Errorf("%#v.String() got %s want schema.table", tn, s)
+	if s != "scm.tbl" {
+		t.Errorf("%#v.String() got %s want scm.tbl", tn, s)
 	}
 
 	sn = tn.SchemaName()
 	s = sn.String()
 
-	if s != "schema" {
-		t.Errorf("%#v.String() got %s want schema", sn, s)
+	if s != "scm" {
+		t.Errorf("%#v.String() got %s want scm", sn, s)
 	}
 
 	tn = types.TableName{
-		Table: types.ID("table", false),
+		Table: types.ID("tbl", false),
 	}
 
 	s = tn.String()
-	if s != "table" {
-		t.Errorf("%#v.String() got %s want table", tn, s)
+	if s != "tbl" {
+		t.Errorf("%#v.String() got %s want tbl", tn, s)
 	}
 }
