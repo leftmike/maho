@@ -1703,7 +1703,6 @@ func (p *Parser) parseShowFromTable() (types.TableName, sql.Expr) {
 }
 
 func (p *Parser) parseShow() sql.Stmt {
-	return nil
 	// SHOW COLUMNS FROM [[database '.'] schema '.'] table
 	// SHOW CONFIG
 	// SHOW CONSTRAINTS FROM [[database '.'] schema '.'] table

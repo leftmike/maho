@@ -22,6 +22,7 @@ func int64Literal(i int64) sql.Literal {
 var (
 	trueLiteral  = sql.Literal{types.BoolValue(true)}
 	falseLiteral = sql.Literal{types.BoolValue(false)}
+	nilLiteral   = sql.Literal{nil}
 )
 
 func TestScan(t *testing.T) {
@@ -802,10 +803,9 @@ foreign key (c1) references t2 on delete set on update cascade)`,
 	}
 }
 
-/*
 func TestCreateIndex(t *testing.T) {
 	cases := []struct {
-		s  string
+		s    string
 		stmt sql.CreateIndex
 		fail bool
 	}{
@@ -860,8 +860,8 @@ func TestCreateIndex(t *testing.T) {
 
 func TestInsertValues(t *testing.T) {
 	cases := []struct {
-		sql  string
-		stmt query.InsertValues
+		s    string
+		stmt sql.InsertValues
 		fail bool
 	}{
 		{s: "insert into t", fail: true},
@@ -879,7 +879,7 @@ func TestInsertValues(t *testing.T) {
 		{s: "insert into t (a, b, a) values (1, 2)", fail: true},
 		{
 			s: "insert into t values (1, 'abc', true)",
-			stmt: query.InsertValues{
+			stmt: sql.InsertValues{
 				Table: types.TableName{Table: types.ID("t", false)},
 				Rows: [][]sql.Expr{
 					{int64Literal(1), stringLiteral("abc"), trueLiteral},
@@ -888,7 +888,7 @@ func TestInsertValues(t *testing.T) {
 		},
 		{
 			s: "insert into t values (1, 'abc', true), (2, 'def', false)",
-			stmt: query.InsertValues{
+			stmt: sql.InsertValues{
 				Table: types.TableName{Table: types.ID("t", false)},
 				Rows: [][]sql.Expr{
 					{int64Literal(1), stringLiteral("abc"), trueLiteral},
@@ -898,10 +898,10 @@ func TestInsertValues(t *testing.T) {
 		},
 		{
 			s: "insert into t values (NULL, 'abc', NULL)",
-			stmt: query.InsertValues{
+			stmt: sql.InsertValues{
 				Table: types.TableName{Table: types.ID("t", false)},
 				Rows: [][]sql.Expr{
-					{sql.Nil(), stringLiteral("abc"), sql.Nil()},
+					{nilLiteral, stringLiteral("abc"), nilLiteral},
 				},
 			},
 		},
@@ -917,7 +917,7 @@ func TestInsertValues(t *testing.T) {
 		} else {
 			if err != nil {
 				t.Errorf("Parse(%q) failed with %s", c.s, err)
-			} else if is, ok := is.(*query.InsertValues); !ok ||
+			} else if is, ok := is.(*sql.InsertValues); !ok ||
 				!reflect.DeepEqual(&c.stmt, is) {
 				t.Errorf("Parse(%q) got %s want %s", c.s, is.String(), c.stmt.String())
 			}
@@ -927,7 +927,7 @@ func TestInsertValues(t *testing.T) {
 
 func TestParseExpr(t *testing.T) {
 	cases := []struct {
-		sql  string
+		s    string
 		expr string
 	}{
 		{"1 * 2 - 3 = 4", "(((1 * 2) - 3) == 4)"},
@@ -1010,8 +1010,8 @@ func TestParseExpr(t *testing.T) {
 
 func TestSelect(t *testing.T) {
 	cases := []struct {
-		sql  string
-		stmt query.Select
+		s    string
+		stmt sql.Select
 		fail bool
 	}{
 		{s: "select", fail: true},
@@ -1020,27 +1020,27 @@ func TestSelect(t *testing.T) {
 		{s: "select c, from t", fail: true},
 		{s: "select t.c, c, * from t", fail: true},
 		{
-			s:  "select *",
-			stmt: query.Select{},
+			s:    "select *",
+			stmt: sql.Select{},
 		},
 		{
 			s: "select * from t",
-			stmt: query.Select{
-				From: &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t", false)}},
+			stmt: sql.Select{
+				From: &sql.FromTableAlias{TableName: types.TableName{Table: types.ID("t", false)}},
 			},
 		},
 		{
 			s: "select * from t where x > 1",
-			stmt: query.Select{
-				From: &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t", false)}},
+			stmt: sql.Select{
+				From: &sql.FromTableAlias{TableName: types.TableName{Table: types.ID("t", false)}},
 				Where: &sql.BinaryExpr{Op: sql.GreaterThanOp, Left: sql.Ref{types.ID("x", false)},
 					Right: int64Literal(1)},
 			},
 		},
 		{
 			s: "select * from t@i",
-			stmt: query.Select{
-				From: &query.FromIndexAlias{
+			stmt: sql.Select{
+				From: &sql.FromIndexAlias{
 					TableName: types.TableName{Table: types.ID("t", false)},
 					Index:     types.ID("i", false),
 				},
@@ -1048,8 +1048,8 @@ func TestSelect(t *testing.T) {
 		},
 		{
 			s: "select * from t@i where x > 1",
-			stmt: query.Select{
-				From: &query.FromIndexAlias{
+			stmt: sql.Select{
+				From: &sql.FromIndexAlias{
 					TableName: types.TableName{Table: types.ID("t", false)},
 					Index:     types.ID("i", false),
 				},
@@ -1059,14 +1059,14 @@ func TestSelect(t *testing.T) {
 		},
 		{
 			s: "select * from t where x = (show schema)",
-			stmt: query.Select{
-				From: &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t", false)}},
+			stmt: sql.Select{
+				From: &sql.FromTableAlias{TableName: types.TableName{Table: types.ID("t", false)}},
 				Where: &sql.BinaryExpr{
 					Op:   sql.EqualOp,
 					Left: sql.Ref{types.ID("x", false)},
-					Right: sql.Subquery{
+					Right: &sql.Subquery{
 						Op: sql.Scalar,
-						Stmt: &misc.Show{
+						Stmt: &sql.Show{
 							Variable: types.SCHEMA,
 						},
 					},
@@ -1075,10 +1075,10 @@ func TestSelect(t *testing.T) {
 		},
 		{
 			s: "select * from (table t) as t",
-			stmt: query.Select{
-				From: query.FromStmt{
-					Stmt: &query.Select{
-						From: &query.FromTableAlias{
+			stmt: sql.Select{
+				From: sql.FromStmt{
+					Stmt: &sql.Select{
+						From: &sql.FromTableAlias{
 							TableName: types.TableName{Table: types.ID("t", false)},
 						},
 					},
@@ -1088,91 +1088,99 @@ func TestSelect(t *testing.T) {
 		},
 		{
 			s: "select c from t",
-			stmt: query.Select{
-				From: &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t", false)}},
-				Results: []query.SelectResult{
-					query.ExprResult{Expr: sql.Ref{types.ID("c", false)}},
+			stmt: sql.Select{
+				From: &sql.FromTableAlias{TableName: types.TableName{Table: types.ID("t", false)}},
+				Results: []sql.SelectResult{
+					sql.ExprResult{Expr: sql.Ref{types.ID("c", false)}},
 				},
 			},
 		},
 		{
 			s: "select c1, c2, t.c3 from t",
-			stmt: query.Select{
-				From: &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t", false)}},
-				Results: []query.SelectResult{
-					query.ExprResult{Expr: sql.Ref{types.ID("c1", false)}},
-					query.ExprResult{Expr: sql.Ref{types.ID("c2", false)}},
-					query.ExprResult{Expr: sql.Ref{types.ID("t", false), types.ID("c3", false)}},
+			stmt: sql.Select{
+				From: &sql.FromTableAlias{TableName: types.TableName{Table: types.ID("t", false)}},
+				Results: []sql.SelectResult{
+					sql.ExprResult{Expr: sql.Ref{types.ID("c1", false)}},
+					sql.ExprResult{Expr: sql.Ref{types.ID("c2", false)}},
+					sql.ExprResult{Expr: sql.Ref{types.ID("t", false), types.ID("c3", false)}},
 				},
 			},
 		},
 		{
 			s: "select t.*, c1, c2 from t",
-			stmt: query.Select{
-				From: &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t", false)}},
-				Results: []query.SelectResult{
-					query.TableResult{Table: types.ID("t", false)},
-					query.ExprResult{Expr: sql.Ref{types.ID("c1", false)}},
-					query.ExprResult{Expr: sql.Ref{types.ID("c2", false)}},
+			stmt: sql.Select{
+				From: &sql.FromTableAlias{TableName: types.TableName{Table: types.ID("t", false)}},
+				Results: []sql.SelectResult{
+					sql.TableResult{Table: types.ID("t", false)},
+					sql.ExprResult{Expr: sql.Ref{types.ID("c1", false)}},
+					sql.ExprResult{Expr: sql.Ref{types.ID("c2", false)}},
 				},
 			},
 		},
 		{
 			s: "select c1, t.*, c2 from t",
-			stmt: query.Select{
-				From: &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t", false)}},
-				Results: []query.SelectResult{
-					query.ExprResult{Expr: sql.Ref{types.ID("c1", false)}},
-					query.TableResult{Table: types.ID("t", false)},
-					query.ExprResult{Expr: sql.Ref{types.ID("c2", false)}},
+			stmt: sql.Select{
+				From: &sql.FromTableAlias{TableName: types.TableName{Table: types.ID("t", false)}},
+				Results: []sql.SelectResult{
+					sql.ExprResult{Expr: sql.Ref{types.ID("c1", false)}},
+					sql.TableResult{Table: types.ID("t", false)},
+					sql.ExprResult{Expr: sql.Ref{types.ID("c2", false)}},
 				},
 			},
 		},
 		{
 			s: "select c1, c2, t.* from t",
-			stmt: query.Select{
-				From: &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t", false)}},
-				Results: []query.SelectResult{
-					query.ExprResult{Expr: sql.Ref{types.ID("c1", false)}},
-					query.ExprResult{Expr: sql.Ref{types.ID("c2", false)}},
-					query.TableResult{Table: types.ID("t", false)},
+			stmt: sql.Select{
+				From: &sql.FromTableAlias{TableName: types.TableName{Table: types.ID("t", false)}},
+				Results: []sql.SelectResult{
+					sql.ExprResult{Expr: sql.Ref{types.ID("c1", false)}},
+					sql.ExprResult{Expr: sql.Ref{types.ID("c2", false)}},
+					sql.TableResult{Table: types.ID("t", false)},
 				},
 			},
 		},
 		{
 			s: "select t2.c1 as a1, c2 as a2 from t",
-			stmt: query.Select{
-				From: &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t", false)}},
-				Results: []query.SelectResult{
-					query.ExprResult{
+			stmt: sql.Select{
+				From: &sql.FromTableAlias{TableName: types.TableName{Table: types.ID("t", false)}},
+				Results: []sql.SelectResult{
+					sql.ExprResult{
 						Expr:  sql.Ref{types.ID("t2", false), types.ID("c1", false)},
 						Alias: types.ID("a1", false),
 					},
-					query.ExprResult{Expr: sql.Ref{types.ID("c2", false)}, Alias: types.ID("a2", false)},
+					sql.ExprResult{
+						Expr:  sql.Ref{types.ID("c2", false)},
+						Alias: types.ID("a2", false),
+					},
 				},
 			},
 		},
 		{
 			s: "select t2.c1 a1, c2 a2 from t",
-			stmt: query.Select{
-				From: &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t", false)}},
-				Results: []query.SelectResult{
-					query.ExprResult{
+			stmt: sql.Select{
+				From: &sql.FromTableAlias{TableName: types.TableName{Table: types.ID("t", false)}},
+				Results: []sql.SelectResult{
+					sql.ExprResult{
 						Expr:  sql.Ref{types.ID("t2", false), types.ID("c1", false)},
 						Alias: types.ID("a1", false),
 					},
-					query.ExprResult{Expr: sql.Ref{types.ID("c2", false)}, Alias: types.ID("a2", false)},
+					sql.ExprResult{
+						Expr:  sql.Ref{types.ID("c2", false)},
+						Alias: types.ID("a2", false),
+					},
 				},
 			},
 		},
 		{
 			s: "select c1 + c2 as a from t",
-			stmt: query.Select{
-				From: &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t", false)}},
-				Results: []query.SelectResult{
-					query.ExprResult{
+			stmt: sql.Select{
+				From: &sql.FromTableAlias{TableName: types.TableName{Table: types.ID("t", false)}},
+				Results: []sql.SelectResult{
+					sql.ExprResult{
 						Expr: &sql.BinaryExpr{Op: sql.AddOp,
-							Left: sql.Ref{types.ID("c1", false)}, Right: sql.Ref{types.ID("c2", false)}},
+							Left:  sql.Ref{types.ID("c1", false)},
+							Right: sql.Ref{types.ID("c2", false)},
+						},
 						Alias: types.ID("a", false),
 					},
 				},
@@ -1180,69 +1188,95 @@ func TestSelect(t *testing.T) {
 		},
 		{
 			s: "select t1.c1, t2.c2 from t1, t2",
-			stmt: query.Select{
-				From: query.FromJoin{
-					Left:  &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t1", false)}},
-					Right: &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t2", false)}},
-					Type:  query.CrossJoin,
+			stmt: sql.Select{
+				From: sql.FromJoin{
+					Left: &sql.FromTableAlias{
+						TableName: types.TableName{Table: types.ID("t1", false)},
+					},
+					Right: &sql.FromTableAlias{
+						TableName: types.TableName{Table: types.ID("t2", false)},
+					},
+					Type: sql.CrossJoin,
 				},
-				Results: []query.SelectResult{
-					query.ExprResult{Expr: sql.Ref{types.ID("t1", false), types.ID("c1", false)}},
-					query.ExprResult{Expr: sql.Ref{types.ID("t2", false), types.ID("c2", false)}},
+				Results: []sql.SelectResult{
+					sql.ExprResult{Expr: sql.Ref{types.ID("t1", false), types.ID("c1", false)}},
+					sql.ExprResult{Expr: sql.Ref{types.ID("t2", false), types.ID("c2", false)}},
 				},
 			},
 		},
 		{
 			s: "select * from t1, t2, t3",
-			stmt: query.Select{
-				From: query.FromJoin{
-					Left: query.FromJoin{
-						Left:  &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t1", false)}},
-						Right: &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t2", false)}},
-						Type:  query.CrossJoin,
+			stmt: sql.Select{
+				From: sql.FromJoin{
+					Left: sql.FromJoin{
+						Left: &sql.FromTableAlias{
+							TableName: types.TableName{Table: types.ID("t1", false)},
+						},
+						Right: &sql.FromTableAlias{
+							TableName: types.TableName{Table: types.ID("t2", false)},
+						},
+						Type: sql.CrossJoin,
 					},
-					Right: &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t3", false)}},
-					Type:  query.CrossJoin,
+					Right: &sql.FromTableAlias{
+						TableName: types.TableName{Table: types.ID("t3", false)},
+					},
+					Type: sql.CrossJoin,
 				},
 			},
 		},
 		{
 			s: "select * from t1 join t2 using (c1), t3",
-			stmt: query.Select{
-				From: query.FromJoin{
-					Left: query.FromJoin{
-						Left:  &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t1", false)}},
-						Right: &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t2", false)}},
-						Type:  query.Join,
+			stmt: sql.Select{
+				From: sql.FromJoin{
+					Left: sql.FromJoin{
+						Left: &sql.FromTableAlias{
+							TableName: types.TableName{Table: types.ID("t1", false)},
+						},
+						Right: &sql.FromTableAlias{
+							TableName: types.TableName{Table: types.ID("t2", false)},
+						},
+						Type:  sql.Join,
 						Using: []types.Identifier{types.ID("c1", false)},
 					},
-					Right: &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t3", false)}},
-					Type:  query.CrossJoin,
+					Right: &sql.FromTableAlias{
+						TableName: types.TableName{Table: types.ID("t3", false)},
+					},
+					Type: sql.CrossJoin,
 				},
 			},
 		},
 		{
 			s: "select * from (t1, t2) right join t3 using (c1)",
-			stmt: query.Select{
-				From: query.FromJoin{
-					Left: query.FromJoin{
-						Left:  &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t1", false)}},
-						Right: &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t2", false)}},
-						Type:  query.CrossJoin,
+			stmt: sql.Select{
+				From: sql.FromJoin{
+					Left: sql.FromJoin{
+						Left: &sql.FromTableAlias{
+							TableName: types.TableName{Table: types.ID("t1", false)},
+						},
+						Right: &sql.FromTableAlias{
+							TableName: types.TableName{Table: types.ID("t2", false)},
+						},
+						Type: sql.CrossJoin,
 					},
-					Right: &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t3", false)}},
-					Type:  query.RightJoin,
+					Right: &sql.FromTableAlias{
+						TableName: types.TableName{Table: types.ID("t3", false)},
+					},
+					Type:  sql.RightJoin,
 					Using: []types.Identifier{types.ID("c1", false)},
 				},
 			},
 		},
 		{
 			s: "select * from t1 inner join t2 on c1 > 5",
-			stmt: query.Select{
-				From: query.FromJoin{
-					Left:  &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t1", false)}},
-					Right: &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t2", false)}},
-					Type:  query.Join,
+			stmt: sql.Select{
+				From: sql.FromJoin{
+					Left: &sql.FromTableAlias{
+						TableName: types.TableName{Table: types.ID("t1", false)},
+					},
+					Right: &sql.FromTableAlias{
+						TableName: types.TableName{Table: types.ID("t2", false)},
+					},
+					Type: sql.Join,
 					On: &sql.BinaryExpr{Op: sql.GreaterThanOp,
 						Left: sql.Ref{types.ID("c1", false)}, Right: int64Literal(5)},
 				},
@@ -1250,12 +1284,20 @@ func TestSelect(t *testing.T) {
 		},
 		{
 			s: "select * from t1 inner join t2 using (c1, c2, c3)",
-			stmt: query.Select{
-				From: query.FromJoin{
-					Left:  &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t1", false)}},
-					Right: &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t2", false)}},
-					Type:  query.Join,
-					Using: []types.Identifier{types.ID("c1", false), types.ID("c2", false), types.ID("c3", false)},
+			stmt: sql.Select{
+				From: sql.FromJoin{
+					Left: &sql.FromTableAlias{
+						TableName: types.TableName{Table: types.ID("t1", false)},
+					},
+					Right: &sql.FromTableAlias{
+						TableName: types.TableName{Table: types.ID("t2", false)},
+					},
+					Type: sql.Join,
+					Using: []types.Identifier{
+						types.ID("c1", false),
+						types.ID("c2", false),
+						types.ID("c3", false),
+					},
 				},
 			},
 		},
@@ -1270,36 +1312,40 @@ func TestSelect(t *testing.T) {
 		{s: "select * from t1 inner join t2 using (c1, c1)", fail: true},
 		{
 			s: "select * from (select * from t1) as s1 join t2 using (c1)",
-			stmt: query.Select{
-				From: query.FromJoin{
-					Left: query.FromStmt{
-						Stmt: &query.Select{
-							From: &query.FromTableAlias{
+			stmt: sql.Select{
+				From: sql.FromJoin{
+					Left: sql.FromStmt{
+						Stmt: &sql.Select{
+							From: &sql.FromTableAlias{
 								TableName: types.TableName{Table: types.ID("t1", false)},
 							},
 						},
 						Alias: types.ID("s1", false),
 					},
-					Right: &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t2", false)}},
-					Type:  query.Join,
+					Right: &sql.FromTableAlias{
+						TableName: types.TableName{Table: types.ID("t2", false)},
+					},
+					Type:  sql.Join,
 					Using: []types.Identifier{types.ID("c1", false)},
 				},
 			},
 		},
 		{
 			s: "select * from t2 join (values (1, 'abc', true)) as v1 using (c1, c2)",
-			stmt: query.Select{
-				From: query.FromJoin{
-					Left: &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t2", false)}},
-					Right: query.FromStmt{
-						Stmt: &query.Values{
+			stmt: sql.Select{
+				From: sql.FromJoin{
+					Left: &sql.FromTableAlias{
+						TableName: types.TableName{Table: types.ID("t2", false)},
+					},
+					Right: sql.FromStmt{
+						Stmt: &sql.Values{
 							Expressions: [][]sql.Expr{
 								{int64Literal(1), stringLiteral("abc"), trueLiteral},
 							},
 						},
 						Alias: types.ID("v1", false),
 					},
-					Type:  query.Join,
+					Type:  sql.Join,
 					Using: []types.Identifier{types.ID("c1", false), types.ID("c2", false)},
 				},
 			},
@@ -1307,25 +1353,25 @@ func TestSelect(t *testing.T) {
 		{
 			s: "select * from (select * from t1) s1 join (values (1, 'abc', true)) as v1 " +
 				"using (c1, c2)",
-			stmt: query.Select{
-				From: query.FromJoin{
-					Left: query.FromStmt{
-						Stmt: &query.Select{
-							From: &query.FromTableAlias{
+			stmt: sql.Select{
+				From: sql.FromJoin{
+					Left: sql.FromStmt{
+						Stmt: &sql.Select{
+							From: &sql.FromTableAlias{
 								TableName: types.TableName{Table: types.ID("t1", false)},
 							},
 						},
 						Alias: types.ID("s1", false),
 					},
-					Right: query.FromStmt{
-						Stmt: &query.Values{
+					Right: sql.FromStmt{
+						Stmt: &sql.Values{
 							Expressions: [][]sql.Expr{
 								{int64Literal(1), stringLiteral("abc"), trueLiteral},
 							},
 						},
 						Alias: types.ID("v1", false),
 					},
-					Type:  query.Join,
+					Type:  sql.Join,
 					Using: []types.Identifier{types.ID("c1", false), types.ID("c2", false)},
 				},
 			},
@@ -1337,9 +1383,9 @@ func TestSelect(t *testing.T) {
 		{s: "select * from (values (1, 'abc', true)) as v1 (a b)", fail: true},
 		{
 			s: "select * from (values (1, 'abc', true)) as v1",
-			stmt: query.Select{
-				From: query.FromStmt{
-					Stmt: &query.Values{
+			stmt: sql.Select{
+				From: sql.FromStmt{
+					Stmt: &sql.Values{
 						Expressions: [][]sql.Expr{
 							{int64Literal(1), stringLiteral("abc"), trueLiteral},
 						},
@@ -1350,15 +1396,19 @@ func TestSelect(t *testing.T) {
 		},
 		{
 			s: "select * from (values (1, 'abc', true)) as v1 (c1, c2, c3)",
-			stmt: query.Select{
-				From: query.FromStmt{
-					Stmt: &query.Values{
+			stmt: sql.Select{
+				From: sql.FromStmt{
+					Stmt: &sql.Values{
 						Expressions: [][]sql.Expr{
 							{int64Literal(1), stringLiteral("abc"), trueLiteral},
 						},
 					},
-					Alias:         types.ID("v1", false),
-					ColumnAliases: []types.Identifier{types.ID("c1", false), types.ID("c2", false), types.ID("c3", false)},
+					Alias: types.ID("v1", false),
+					ColumnAliases: []types.Identifier{
+						types.ID("c1", false),
+						types.ID("c2", false),
+						types.ID("c3", false),
+					},
 				},
 			},
 		},
@@ -1369,10 +1419,12 @@ func TestSelect(t *testing.T) {
 		{s: "select * from (select * from t1) as s1 (a b)", fail: true},
 		{
 			s: "select * from (select * from t1) as s1",
-			stmt: query.Select{
-				From: query.FromStmt{
-					Stmt: &query.Select{
-						From: &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t1", false)}},
+			stmt: sql.Select{
+				From: sql.FromStmt{
+					Stmt: &sql.Select{
+						From: &sql.FromTableAlias{
+							TableName: types.TableName{Table: types.ID("t1", false)},
+						},
 					},
 					Alias: types.ID("s1", false),
 				},
@@ -1380,10 +1432,12 @@ func TestSelect(t *testing.T) {
 		},
 		{
 			s: "select * from (select * from t1) as s1 (c1)",
-			stmt: query.Select{
-				From: query.FromStmt{
-					Stmt: &query.Select{
-						From: &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t1", false)}},
+			stmt: sql.Select{
+				From: sql.FromStmt{
+					Stmt: &sql.Select{
+						From: &sql.FromTableAlias{
+							TableName: types.TableName{Table: types.ID("t1", false)},
+						},
 					},
 					Alias:         types.ID("s1", false),
 					ColumnAliases: []types.Identifier{types.ID("c1", false)},
@@ -1392,25 +1446,36 @@ func TestSelect(t *testing.T) {
 		},
 		{
 			s: "select * from (select * from t1) as s1 (c1, c2)",
-			stmt: query.Select{
-				From: query.FromStmt{
-					Stmt: &query.Select{
-						From: &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t1", false)}},
+			stmt: sql.Select{
+				From: sql.FromStmt{
+					Stmt: &sql.Select{
+						From: &sql.FromTableAlias{
+							TableName: types.TableName{Table: types.ID("t1", false)},
+						},
 					},
-					Alias:         types.ID("s1", false),
-					ColumnAliases: []types.Identifier{types.ID("c1", false), types.ID("c2", false)},
+					Alias: types.ID("s1", false),
+					ColumnAliases: []types.Identifier{
+						types.ID("c1", false),
+						types.ID("c2", false),
+					},
 				},
 			},
 		},
 		{
 			s: "select * from (select * from t1) as s1 (c1, c2, c3)",
-			stmt: query.Select{
-				From: query.FromStmt{
-					Stmt: &query.Select{
-						From: &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t1", false)}},
+			stmt: sql.Select{
+				From: sql.FromStmt{
+					Stmt: &sql.Select{
+						From: &sql.FromTableAlias{
+							TableName: types.TableName{Table: types.ID("t1", false)},
+						},
 					},
-					Alias:         types.ID("s1", false),
-					ColumnAliases: []types.Identifier{types.ID("c1", false), types.ID("c2", false), types.ID("c3", false)},
+					Alias: types.ID("s1", false),
+					ColumnAliases: []types.Identifier{
+						types.ID("c1", false),
+						types.ID("c2", false),
+						types.ID("c3", false),
+					},
 				},
 			},
 		},
@@ -1422,20 +1487,20 @@ func TestSelect(t *testing.T) {
 		{s: "select c from t group by c, d, having c > 5", fail: true},
 		{
 			s: "select c from t group by c",
-			stmt: query.Select{
-				From: &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t", false)}},
-				Results: []query.SelectResult{
-					query.ExprResult{Expr: sql.Ref{types.ID("c", false)}},
+			stmt: sql.Select{
+				From: &sql.FromTableAlias{TableName: types.TableName{Table: types.ID("t", false)}},
+				Results: []sql.SelectResult{
+					sql.ExprResult{Expr: sql.Ref{types.ID("c", false)}},
 				},
 				GroupBy: []sql.Expr{sql.Ref{types.ID("c", false)}},
 			},
 		},
 		{
 			s: "select c from t group by c, d, e + f",
-			stmt: query.Select{
-				From: &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t", false)}},
-				Results: []query.SelectResult{
-					query.ExprResult{Expr: sql.Ref{types.ID("c", false)}},
+			stmt: sql.Select{
+				From: &sql.FromTableAlias{TableName: types.TableName{Table: types.ID("t", false)}},
+				Results: []sql.SelectResult{
+					sql.ExprResult{Expr: sql.Ref{types.ID("c", false)}},
 				},
 				GroupBy: []sql.Expr{sql.Ref{types.ID("c", false)}, sql.Ref{types.ID("d", false)},
 					&sql.BinaryExpr{Op: sql.AddOp, Left: sql.Ref{types.ID("e", false)},
@@ -1445,10 +1510,10 @@ func TestSelect(t *testing.T) {
 		},
 		{
 			s: "select c from t group by c having c > 1",
-			stmt: query.Select{
-				From: &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t", false)}},
-				Results: []query.SelectResult{
-					query.ExprResult{Expr: sql.Ref{types.ID("c", false)}},
+			stmt: sql.Select{
+				From: &sql.FromTableAlias{TableName: types.TableName{Table: types.ID("t", false)}},
+				Results: []sql.SelectResult{
+					sql.ExprResult{Expr: sql.Ref{types.ID("c", false)}},
 				},
 				GroupBy: []sql.Expr{sql.Ref{types.ID("c", false)}},
 				Having: &sql.BinaryExpr{Op: sql.GreaterThanOp, Left: sql.Ref{types.ID("c", false)},
@@ -1467,7 +1532,7 @@ func TestSelect(t *testing.T) {
 		} else {
 			if err != nil {
 				t.Errorf("Parse(%q) failed with %s", c.s, err)
-			} else if ss, ok := ss.(*query.Select); !ok || !reflect.DeepEqual(&c.stmt, ss) {
+			} else if ss, ok := ss.(*sql.Select); !ok || !reflect.DeepEqual(&c.stmt, ss) {
 				t.Errorf("Parse(%q) got %s want %s", c.s, ss.String(), c.stmt.String())
 			}
 		}
@@ -1476,8 +1541,8 @@ func TestSelect(t *testing.T) {
 
 func TestValues(t *testing.T) {
 	cases := []struct {
-		sql  string
-		stmt query.Values
+		s    string
+		stmt sql.Values
 		fail bool
 	}{
 		{s: "values", fail: true},
@@ -1490,7 +1555,7 @@ func TestValues(t *testing.T) {
 		{s: "values (1, 2, 3), (4, 5), (6, 7, 8)", fail: true},
 		{
 			s: "values (1, 'abc', true)",
-			stmt: query.Values{
+			stmt: sql.Values{
 				Expressions: [][]sql.Expr{
 					{int64Literal(1), stringLiteral("abc"), trueLiteral},
 				},
@@ -1498,7 +1563,7 @@ func TestValues(t *testing.T) {
 		},
 		{
 			s: "values (1, 'abc', true), (2, 'def', false)",
-			stmt: query.Values{
+			stmt: sql.Values{
 				Expressions: [][]sql.Expr{
 					{int64Literal(1), stringLiteral("abc"), trueLiteral},
 					{int64Literal(2), stringLiteral("def"), falseLiteral},
@@ -1517,7 +1582,7 @@ func TestValues(t *testing.T) {
 		} else {
 			if err != nil {
 				t.Errorf("Parse(%q) failed with %s", c.s, err)
-			} else if vs, ok := vs.(*query.Values); !ok || !reflect.DeepEqual(&c.stmt, vs) {
+			} else if vs, ok := vs.(*sql.Values); !ok || !reflect.DeepEqual(&c.stmt, vs) {
 				t.Errorf("Parse(%q) got %s want %s", c.s, vs.String(), c.stmt.String())
 			}
 		}
@@ -1526,8 +1591,8 @@ func TestValues(t *testing.T) {
 
 func TestDelete(t *testing.T) {
 	cases := []struct {
-		sql  string
-		stmt query.Delete
+		s    string
+		stmt sql.Delete
 		fail bool
 	}{
 		{s: "delete", fail: true},
@@ -1537,13 +1602,13 @@ func TestDelete(t *testing.T) {
 		{s: "delete from t where", fail: true},
 		{
 			s: "delete from t",
-			stmt: query.Delete{
+			stmt: sql.Delete{
 				Table: types.TableName{Table: types.ID("t", false)},
 			},
 		},
 		{
 			s: "delete from t where c > 1",
-			stmt: query.Delete{
+			stmt: sql.Delete{
 				Table: types.TableName{Table: types.ID("t", false)},
 				Where: &sql.BinaryExpr{Op: sql.GreaterThanOp, Left: sql.Ref{types.ID("c", false)},
 					Right: int64Literal(1)},
@@ -1561,7 +1626,7 @@ func TestDelete(t *testing.T) {
 		} else {
 			if err != nil {
 				t.Errorf("Parse(%q) failed with %s", c.s, err)
-			} else if ds, ok := ds.(*query.Delete); !ok || !reflect.DeepEqual(&c.stmt, ds) {
+			} else if ds, ok := ds.(*sql.Delete); !ok || !reflect.DeepEqual(&c.stmt, ds) {
 				t.Errorf("Parse(%q) got %s want %s", c.s, ds.String(), c.stmt.String())
 			}
 		}
@@ -1570,8 +1635,8 @@ func TestDelete(t *testing.T) {
 
 func TestUpdate(t *testing.T) {
 	cases := []struct {
-		sql  string
-		stmt query.Update
+		s    string
+		stmt sql.Update
 		fail bool
 	}{
 		{s: "update", fail: true},
@@ -1585,18 +1650,18 @@ func TestUpdate(t *testing.T) {
 		{s: "update t set where c = 6", fail: true},
 		{
 			s: "update t set c = 5",
-			stmt: query.Update{
+			stmt: sql.Update{
 				Table: types.TableName{Table: types.ID("t", false)},
-				ColumnUpdates: []query.ColumnUpdate{
+				ColumnUpdates: []sql.ColumnUpdate{
 					{Column: types.ID("c", false), Expr: int64Literal(5)},
 				},
 			},
 		},
 		{
 			s: "update t set c = 0 where c > 1",
-			stmt: query.Update{
+			stmt: sql.Update{
 				Table: types.TableName{Table: types.ID("t", false)},
-				ColumnUpdates: []query.ColumnUpdate{
+				ColumnUpdates: []sql.ColumnUpdate{
 					{Column: types.ID("c", false), Expr: int64Literal(0)},
 				},
 				Where: &sql.BinaryExpr{Op: sql.GreaterThanOp, Left: sql.Ref{types.ID("c", false)},
@@ -1605,9 +1670,9 @@ func TestUpdate(t *testing.T) {
 		},
 		{
 			s: "update t set c = default where c > 1",
-			stmt: query.Update{
+			stmt: sql.Update{
 				Table: types.TableName{Table: types.ID("t", false)},
-				ColumnUpdates: []query.ColumnUpdate{
+				ColumnUpdates: []sql.ColumnUpdate{
 					{Column: types.ID("c", false), Expr: nil},
 				},
 				Where: &sql.BinaryExpr{Op: sql.GreaterThanOp, Left: sql.Ref{types.ID("c", false)},
@@ -1616,9 +1681,9 @@ func TestUpdate(t *testing.T) {
 		},
 		{
 			s: "update t set c1 = 1, c2 = 2, c3 = 3",
-			stmt: query.Update{
+			stmt: sql.Update{
 				Table: types.TableName{Table: types.ID("t", false)},
-				ColumnUpdates: []query.ColumnUpdate{
+				ColumnUpdates: []sql.ColumnUpdate{
 					{Column: types.ID("c1", false), Expr: int64Literal(1)},
 					{Column: types.ID("c2", false), Expr: int64Literal(2)},
 					{Column: types.ID("c3", false), Expr: int64Literal(3)},
@@ -1637,7 +1702,7 @@ func TestUpdate(t *testing.T) {
 		} else {
 			if err != nil {
 				t.Errorf("Parse(%q) failed with %s", c.s, err)
-			} else if us, ok := us.(*query.Update); !ok || !reflect.DeepEqual(&c.stmt, us) {
+			} else if us, ok := us.(*sql.Update); !ok || !reflect.DeepEqual(&c.stmt, us) {
 				t.Errorf("Parse(%q) got %s want %s", c.s, us.String(), c.stmt.String())
 			}
 		}
@@ -1646,8 +1711,8 @@ func TestUpdate(t *testing.T) {
 
 func TestCreateDatabase(t *testing.T) {
 	cases := []struct {
-		sql  string
-		stmt evaluate.Stmt
+		s    string
+		stmt sql.Stmt
 		fail bool
 	}{
 		{s: "create database", fail: true},
@@ -1668,8 +1733,8 @@ func TestCreateDatabase(t *testing.T) {
 			stmt: &sql.CreateDatabase{
 				Database: types.ID("test", false),
 				Options: map[types.Identifier]string{
-					types.UnquotedID("path"):   "string",
-					types.UnquotedID("engine"): "fast",
+					types.ID("path", false):   "string",
+					types.ID("engine", false): "fast",
 				},
 			},
 		},
@@ -1696,8 +1761,8 @@ func TestCreateDatabase(t *testing.T) {
 
 func TestAlterTable(t *testing.T) {
 	cases := []struct {
-		sql  string
-		stmt evaluate.Stmt
+		s    string
+		stmt sql.Stmt
 		fail bool
 	}{
 		{s: "alter table tbl", fail: true},
@@ -1709,7 +1774,10 @@ func TestAlterTable(t *testing.T) {
 				Actions: []sql.AlterAction{
 					&sql.AddForeignKey{
 						sql.ForeignKey{
-							FKCols:   []types.Identifier{types.ID("c1", false), types.ID("c2", false)},
+							FKCols: []types.Identifier{
+								types.ID("c1", false),
+								types.ID("c2", false),
+							},
 							RefTable: types.TableName{Table: types.ID("rtbl", false)},
 						},
 					},
@@ -1786,11 +1854,11 @@ alter column c1 drop default, alter c2 drop not null, drop constraint con`,
 					},
 					&sql.DropConstraint{
 						Column: types.ID("c1", false),
-						Type:   types.DefaultConstraint,
+						Type:   sql.DefaultConstraint,
 					},
 					&sql.DropConstraint{
 						Column: types.ID("c2", false),
-						Type:   types.NotNullConstraint,
+						Type:   sql.NotNullConstraint,
 					},
 					&sql.DropConstraint{
 						Name: types.ID("con", false),
@@ -1799,27 +1867,27 @@ alter column c1 drop default, alter c2 drop not null, drop constraint con`,
 			},
 		},
 		{
-			s:  "alter table tbl drop con",
+			s:    "alter table tbl drop con",
 			fail: true,
 		},
 		{
-			s:  "alter table tbl constraint if exists con",
+			s:    "alter table tbl constraint if exists con",
 			fail: true,
 		},
 		{
-			s:  "alter table tbl drop constraint if con",
+			s:    "alter table tbl drop constraint if con",
 			fail: true,
 		},
 		{
-			s:  "alter table tbl alter column drop default",
+			s:    "alter table tbl alter column drop default",
 			fail: true,
 		},
 		{
-			s:  "alter table tbl alter c1 default",
+			s:    "alter table tbl alter c1 default",
 			fail: true,
 		},
 		{
-			s:  "alter table tbl alter c1 drop null",
+			s:    "alter table tbl alter c1 drop null",
 			fail: true,
 		},
 	}
@@ -1842,4 +1910,3 @@ alter column c1 drop default, alter c2 drop not null, drop constraint con`,
 		}
 	}
 }
-*/

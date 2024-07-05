@@ -131,9 +131,9 @@ func (se *SExpr) String() string {
 
 func (ue *UnaryExpr) String() string {
 	if ue.Op == NoOp {
-		return fmt.Sprintf("(%s)", ue.Expr)
+		return ue.Expr.String()
 	}
-	return fmt.Sprintf("%s(%s)", opNames[ue.Op], ue.Expr)
+	return fmt.Sprintf("(%s %s)", opNames[ue.Op], ue.Expr)
 }
 
 func (be *BinaryExpr) String() string {
