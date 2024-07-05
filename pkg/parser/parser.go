@@ -6,9 +6,8 @@ import (
 	"runtime"
 	"strconv"
 
-	"github.com/leftmike/maho/pkg/parser/expr"
 	"github.com/leftmike/maho/pkg/parser/scanner"
-	"github.com/leftmike/maho/pkg/parser/stmt"
+	"github.com/leftmike/maho/pkg/parser/sql"
 	"github.com/leftmike/maho/pkg/parser/token"
 	"github.com/leftmike/maho/pkg/types"
 )
@@ -31,7 +30,7 @@ func NewParser(rr io.RuneReader, fn string) *Parser {
 	return &p
 }
 
-func (p *Parser) Parse() (stmt stmt.Stmt, err error) {
+func (p *Parser) Parse() (stmt sql.Stmt, err error) {
 	t, err := p.scanRune()
 	if err != nil {
 		return nil, err
@@ -244,7 +243,7 @@ func (p *Parser) expectEndOfStatement() {
 	}
 }
 
-func (p *Parser) parseStmt() stmt.Stmt {
+func (p *Parser) parseStmt() sql.Stmt {
 	if p.maybeToken(token.EndOfStatement) {
 		return nil
 	}
@@ -277,10 +276,10 @@ func (p *Parser) parseStmt() stmt.Stmt {
 		return p.parseAlterTable()
 	case types.BEGIN:
 		// BEGIN
-		return &stmt.Begin{}
+		return &sql.Begin{}
 	case types.COMMIT:
 		// COMMIT
-		return &stmt.Commit{}
+		return &sql.Commit{}
 	case types.COPY:
 		// COPY
 		return p.parseCopy()
@@ -326,9 +325,9 @@ func (p *Parser) parseStmt() stmt.Stmt {
 		/*
 			case types.EXECUTE:
 				return p.parseExecute()
-			case types.EXPLAIN:
-				return p.parseExplain()
 		*/
+	case types.EXPLAIN:
+		return p.parseExplain()
 	case types.INSERT:
 		// INSERT INTO ...
 		p.expectReserved(types.INTO)
@@ -339,7 +338,7 @@ func (p *Parser) parseStmt() stmt.Stmt {
 		*/
 	case types.ROLLBACK:
 		// ROLLBACK
-		return &stmt.Rollback{}
+		return &sql.Rollback{}
 	case types.SELECT:
 		// SELECT ...
 		return p.parseSelect()
@@ -352,7 +351,7 @@ func (p *Parser) parseStmt() stmt.Stmt {
 	case types.START:
 		// START TRANSACTION
 		p.expectReserved(types.TRANSACTION)
-		return &stmt.Begin{}
+		return &sql.Begin{}
 	case types.UPDATE:
 		// UPDATE ...
 		return p.parseUpdate()
@@ -408,16 +407,16 @@ func (p *Parser) parseAlias(required bool) types.Identifier {
 	return 0
 }
 
-func (p *Parser) parseTableAlias() stmt.FromItem {
+func (p *Parser) parseTableAlias() sql.FromItem {
 	tn := p.parseTableName()
 	if p.maybeToken(token.AtSign) {
-		return &stmt.FromIndexAlias{
+		return &sql.FromIndexAlias{
 			TableName: tn,
 			Index:     p.expectIdentifier("expected an index"),
 			Alias:     p.parseAlias(false),
 		}
 	}
-	return &stmt.FromTableAlias{TableName: tn, Alias: p.parseAlias(false)}
+	return &sql.FromTableAlias{TableName: tn, Alias: p.parseAlias(false)}
 }
 
 func (p *Parser) parseColumnAliases() []types.Identifier {
@@ -436,9 +435,9 @@ func (p *Parser) parseColumnAliases() []types.Identifier {
 	return cols
 }
 
-func (p *Parser) parseCreateTable() stmt.Stmt {
+func (p *Parser) parseCreateTable() sql.Stmt {
 	// CREATE TABLE [IF NOT EXISTS] [[database '.'] schema '.'] table ...
-	var s stmt.CreateTable
+	var s sql.CreateTable
 
 	if p.optionalReserved(types.IF) {
 		p.expectReserved(types.NOT)
@@ -452,8 +451,8 @@ func (p *Parser) parseCreateTable() stmt.Stmt {
 	return &s
 }
 
-func (p *Parser) parseKey(unique bool) stmt.IndexKey {
-	key := stmt.IndexKey{
+func (p *Parser) parseKey(unique bool) sql.IndexKey {
+	key := sql.IndexKey{
 		Unique: unique,
 	}
 
@@ -484,27 +483,27 @@ func (p *Parser) parseKey(unique bool) stmt.IndexKey {
 	return key
 }
 
-func (p *Parser) parseRefAction() stmt.RefAction {
+func (p *Parser) parseRefAction() sql.RefAction {
 	switch p.expectReserved(types.NO, types.RESTRICT, types.CASCADE, types.SET) {
 	case types.NO:
 		p.expectReserved(types.ACTION)
-		return stmt.NoAction
+		return sql.NoAction
 	case types.RESTRICT:
-		return stmt.Restrict
+		return sql.Restrict
 	case types.CASCADE:
-		return stmt.Cascade
+		return sql.Cascade
 	case types.SET:
 		switch p.expectReserved(types.NULL, types.DEFAULT) {
 		case types.NULL:
-			return stmt.SetNull
+			return sql.SetNull
 		case types.DEFAULT:
-			return stmt.SetDefault
+			return sql.SetDefault
 		}
 	}
 	panic("never reached")
 }
 
-func (p *Parser) parseOnActions(fk *stmt.ForeignKey) *stmt.ForeignKey {
+func (p *Parser) parseOnActions(fk *sql.ForeignKey) *sql.ForeignKey {
 	var onDelete, onUpdate bool
 	for p.optionalReserved(types.ON) {
 		if p.expectReserved(types.DELETE, types.UPDATE) == types.DELETE {
@@ -525,7 +524,7 @@ func (p *Parser) parseOnActions(fk *stmt.ForeignKey) *stmt.ForeignKey {
 	return fk
 }
 
-func (p *Parser) parseForeignKey(cn types.Identifier) *stmt.ForeignKey {
+func (p *Parser) parseForeignKey(cn types.Identifier) *sql.ForeignKey {
 	var cols []types.Identifier
 	p.expectTokens(token.LParen)
 	for {
@@ -551,7 +550,7 @@ func (p *Parser) parseForeignKey(cn types.Identifier) *stmt.ForeignKey {
 	}
 
 	return p.parseOnActions(
-		&stmt.ForeignKey{
+		&sql.ForeignKey{
 			Name:     cn,
 			FKCols:   cols,
 			RefTable: rtn,
@@ -559,7 +558,7 @@ func (p *Parser) parseForeignKey(cn types.Identifier) *stmt.ForeignKey {
 		})
 }
 
-func (p *Parser) parseCreateDetails(s *stmt.CreateTable) {
+func (p *Parser) parseCreateDetails(s *sql.CreateTable) {
 	/*
 		CREATE TABLE [[database '.'] schema '.'] table
 			'('	(column data_type [column_constraint] ...
@@ -584,17 +583,17 @@ func (p *Parser) parseCreateDetails(s *stmt.CreateTable) {
 		if p.optionalReserved(types.PRIMARY) {
 			p.expectReserved(types.KEY)
 			key := p.parseKey(true)
-			p.addKeyConstraint(s, stmt.PrimaryConstraint,
+			p.addKeyConstraint(s, sql.PrimaryConstraint,
 				makeKeyConstraintName(cn, key, "primary"), key)
 		} else if p.optionalReserved(types.UNIQUE) {
 			key := p.parseKey(true)
-			p.addKeyConstraint(s, stmt.UniqueConstraint, makeKeyConstraintName(cn, key, "unique"),
+			p.addKeyConstraint(s, sql.UniqueConstraint, makeKeyConstraintName(cn, key, "unique"),
 				key)
 		} else if p.optionalReserved(types.CHECK) {
 			p.expectTokens(token.LParen)
 			s.Constraints = append(s.Constraints,
-				stmt.Constraint{
-					Type:   stmt.CheckConstraint,
+				sql.Constraint{
+					Type:   sql.CheckConstraint,
 					Name:   cn,
 					ColNum: -1,
 					Check:  p.parseExpr(),
@@ -687,7 +686,7 @@ func (p *Parser) parseColumnType() types.ColumnType {
 	return ct
 }
 
-func makeKeyConstraintName(cn types.Identifier, key stmt.IndexKey, suffix string) types.Identifier {
+func makeKeyConstraintName(cn types.Identifier, key sql.IndexKey, suffix string) types.Identifier {
 	if cn != 0 {
 		return cn
 	}
@@ -700,14 +699,14 @@ func makeKeyConstraintName(cn types.Identifier, key stmt.IndexKey, suffix string
 	return types.ID(nam+suffix, false)
 }
 
-func (p *Parser) addKeyConstraint(s *stmt.CreateTable, ct stmt.ConstraintType,
-	cn types.Identifier, nkey stmt.IndexKey) {
+func (p *Parser) addKeyConstraint(s *sql.CreateTable, ct sql.ConstraintType,
+	cn types.Identifier, nkey sql.IndexKey) {
 
 	for _, c := range s.Constraints {
 		if c.Name == cn {
 			p.error(fmt.Sprintf("duplicate constraint name: %s", cn))
 		}
-		if c.Type == stmt.PrimaryConstraint && ct == stmt.PrimaryConstraint {
+		if c.Type == sql.PrimaryConstraint && ct == sql.PrimaryConstraint {
 			p.error("only one primary key allowed")
 		}
 	}
@@ -719,7 +718,7 @@ func (p *Parser) addKeyConstraint(s *stmt.CreateTable, ct stmt.ConstraintType,
 	}
 
 	s.Constraints = append(s.Constraints,
-		stmt.Constraint{
+		sql.Constraint{
 			Type:   ct,
 			Name:   cn,
 			ColNum: -1,
@@ -727,7 +726,7 @@ func (p *Parser) addKeyConstraint(s *stmt.CreateTable, ct stmt.ConstraintType,
 		})
 }
 
-func (p *Parser) addColumnConstraint(s *stmt.CreateTable, ct stmt.ConstraintType,
+func (p *Parser) addColumnConstraint(s *sql.CreateTable, ct sql.ConstraintType,
 	cn types.Identifier, colNum int) {
 
 	for _, c := range s.Constraints {
@@ -739,14 +738,14 @@ func (p *Parser) addColumnConstraint(s *stmt.CreateTable, ct stmt.ConstraintType
 	}
 
 	s.Constraints = append(s.Constraints,
-		stmt.Constraint{
+		sql.Constraint{
 			Type:   ct,
 			Name:   cn,
 			ColNum: colNum,
 		})
 }
 
-func (p *Parser) parseColumn(s *stmt.CreateTable) {
+func (p *Parser) parseColumn(s *sql.CreateTable) {
 	/*
 		column data_type [[CONSTRAINT constraint] column_constraint]
 		column_constraint =
@@ -770,7 +769,7 @@ func (p *Parser) parseColumn(s *stmt.CreateTable) {
 
 	ct := p.parseColumnType()
 
-	var dflt expr.Expr
+	var dflt sql.Expr
 	for {
 		var cn types.Identifier
 		if p.optionalReserved(types.CONSTRAINT) {
@@ -782,7 +781,7 @@ func (p *Parser) parseColumn(s *stmt.CreateTable) {
 				p.error("DEFAULT specified more than once per column")
 			}
 			if cn != 0 {
-				p.addColumnConstraint(s, stmt.DefaultConstraint, cn, len(s.Columns)-1)
+				p.addColumnConstraint(s, sql.DefaultConstraint, cn, len(s.Columns)-1)
 			}
 			dflt = p.parseExpr()
 		} else if p.optionalReserved(types.NOT) {
@@ -792,7 +791,7 @@ func (p *Parser) parseColumn(s *stmt.CreateTable) {
 				p.error("NOT NULL specified more than once per column")
 			}
 			if cn != 0 {
-				p.addColumnConstraint(s, stmt.NotNullConstraint, cn, len(s.Columns)-1)
+				p.addColumnConstraint(s, sql.NotNullConstraint, cn, len(s.Columns)-1)
 			}
 			ct.NotNull = true
 		} else if p.optionalReserved(types.PRIMARY) {
@@ -801,8 +800,8 @@ func (p *Parser) parseColumn(s *stmt.CreateTable) {
 			if cn == 0 {
 				cn = types.ID(nam.String()+"_primary", false)
 			}
-			p.addKeyConstraint(s, stmt.PrimaryConstraint, cn,
-				stmt.IndexKey{
+			p.addKeyConstraint(s, sql.PrimaryConstraint, cn,
+				sql.IndexKey{
 					Unique:  true,
 					Columns: []types.Identifier{nam},
 					Reverse: []bool{false},
@@ -811,8 +810,8 @@ func (p *Parser) parseColumn(s *stmt.CreateTable) {
 			if cn == 0 {
 				cn = types.ID(nam.String()+"_unique", false)
 			}
-			p.addKeyConstraint(s, stmt.UniqueConstraint, cn,
-				stmt.IndexKey{
+			p.addKeyConstraint(s, sql.UniqueConstraint, cn,
+				sql.IndexKey{
 					Unique:  true,
 					Columns: []types.Identifier{nam},
 					Reverse: []bool{false},
@@ -820,8 +819,8 @@ func (p *Parser) parseColumn(s *stmt.CreateTable) {
 		} else if p.optionalReserved(types.CHECK) {
 			p.expectTokens(token.LParen)
 			s.Constraints = append(s.Constraints,
-				stmt.Constraint{
-					Type:   stmt.CheckConstraint,
+				sql.Constraint{
+					Type:   sql.CheckConstraint,
 					Name:   cn,
 					ColNum: len(s.Columns) - 1,
 					Check:  p.parseExpr(),
@@ -837,7 +836,7 @@ func (p *Parser) parseColumn(s *stmt.CreateTable) {
 
 			s.ForeignKeys = append(s.ForeignKeys,
 				p.parseOnActions(
-					&stmt.ForeignKey{
+					&sql.ForeignKey{
 						Name:     cn,
 						FKCols:   []types.Identifier{nam},
 						RefTable: rtn,
@@ -854,7 +853,7 @@ func (p *Parser) parseColumn(s *stmt.CreateTable) {
 	s.ColumnDefaults = append(s.ColumnDefaults, dflt)
 }
 
-func (p *Parser) parseAlterTable() stmt.Stmt {
+func (p *Parser) parseAlterTable() sql.Stmt {
 	// ALTER TABLE table action [',' ...]
 	// action =
 	//      ADD [CONSTRAINT constraint] table_constraint
@@ -866,7 +865,7 @@ func (p *Parser) parseAlterTable() stmt.Stmt {
 	//    [ON DELETE referential_action] [ON UPDATE referential_action]
 	// referential_action = NO ACTION | RESTRICT | CASCADE | SET NULL | SET DEFAULT
 	// columns = '(' column [',' ...] ')'
-	var s stmt.AlterTable
+	var s sql.AlterTable
 
 	s.Table = p.parseTableName()
 
@@ -882,7 +881,7 @@ func (p *Parser) parseAlterTable() stmt.Stmt {
 			p.expectReserved(types.KEY)
 
 			fk := p.parseForeignKey(cn)
-			s.Actions = append(s.Actions, &stmt.AddForeignKey{*fk})
+			s.Actions = append(s.Actions, &sql.AddForeignKey{*fk})
 		case types.DROP:
 			p.expectReserved(types.CONSTRAINT)
 
@@ -893,7 +892,7 @@ func (p *Parser) parseAlterTable() stmt.Stmt {
 			}
 
 			s.Actions = append(s.Actions,
-				&stmt.DropConstraint{
+				&sql.DropConstraint{
 					Name:     p.expectIdentifier("expected a constraint name"),
 					IfExists: ifExists,
 				})
@@ -902,17 +901,17 @@ func (p *Parser) parseAlterTable() stmt.Stmt {
 			nam := p.expectIdentifier("expected a column name")
 			p.expectReserved(types.DROP)
 
-			var ct stmt.ConstraintType
+			var ct sql.ConstraintType
 			switch p.expectReserved(types.DEFAULT, types.NOT) {
 			case types.DEFAULT:
-				ct = stmt.DefaultConstraint
+				ct = sql.DefaultConstraint
 			case types.NOT:
 				p.expectReserved(types.NULL)
-				ct = stmt.NotNullConstraint
+				ct = sql.NotNullConstraint
 			}
 
 			s.Actions = append(s.Actions,
-				&stmt.DropConstraint{
+				&sql.DropConstraint{
 					Column: nam,
 					Type:   ct,
 				})
@@ -926,11 +925,11 @@ func (p *Parser) parseAlterTable() stmt.Stmt {
 	return &s
 }
 
-func (p *Parser) parseCreateIndex(unique bool) stmt.Stmt {
+func (p *Parser) parseCreateIndex(unique bool) sql.Stmt {
 	// CREATE [UNIQUE] INDEX [IF NOT EXISTS] index ON table
 	//    [USING btree]
 	//    '(' column [ASC | DESC] [, ...] ')'
-	var s stmt.CreateIndex
+	var s sql.CreateIndex
 
 	if p.optionalReserved(types.IF) {
 		p.expectReserved(types.NOT)
@@ -951,9 +950,9 @@ func (p *Parser) parseCreateIndex(unique bool) stmt.Stmt {
 	return &s
 }
 
-func (p *Parser) parseDelete() stmt.Stmt {
+func (p *Parser) parseDelete() sql.Stmt {
 	// DELETE FROM [database '.'] table [WHERE expr]
-	var s stmt.Delete
+	var s sql.Delete
 	s.Table = p.parseTableName()
 	if p.optionalReserved(types.WHERE) {
 		s.Where = p.parseExpr()
@@ -962,9 +961,9 @@ func (p *Parser) parseDelete() stmt.Stmt {
 	return &s
 }
 
-func (p *Parser) parseDropTable() stmt.Stmt {
+func (p *Parser) parseDropTable() sql.Stmt {
 	// DROP TABLE [IF EXISTS] [database '.' ] table [',' ...] [CASCADE | RESTRICT]
-	var s stmt.DropTable
+	var s sql.DropTable
 	if p.optionalReserved(types.IF) {
 		p.expectReserved(types.EXISTS)
 		s.IfExists = true
@@ -984,9 +983,9 @@ func (p *Parser) parseDropTable() stmt.Stmt {
 	return &s
 }
 
-func (p *Parser) parseDropIndex() stmt.Stmt {
+func (p *Parser) parseDropIndex() sql.Stmt {
 	// DROP INDEX [IF EXISTS] index ON table
-	var s stmt.DropIndex
+	var s sql.DropIndex
 	if p.optionalReserved(types.IF) {
 		p.expectReserved(types.EXISTS)
 		s.IfExists = true
@@ -997,7 +996,7 @@ func (p *Parser) parseDropIndex() stmt.Stmt {
 	return &s
 }
 
-func (p *Parser) optionalSubquery() (stmt.Stmt, bool) {
+func (p *Parser) optionalSubquery() (sql.Stmt, bool) {
 	if p.optionalReserved(types.SELECT) {
 		// ( select )
 		return p.parseSelect(), true
@@ -1009,14 +1008,14 @@ func (p *Parser) optionalSubquery() (stmt.Stmt, bool) {
 		return p.parseShow(), true
 	} else if p.optionalReserved(types.TABLE) {
 		// ( TABLE [[database .] schema .] table )
-		return &stmt.Select{
-			From: &stmt.FromTableAlias{TableName: p.parseTableName()},
+		return &sql.Select{
+			From: &sql.FromTableAlias{TableName: p.parseTableName()},
 		}, true
 	}
 	return nil, false
 }
 
-func (p *Parser) ParseExpr() (e expr.Expr, err error) {
+func (p *Parser) ParseExpr() (e sql.Expr, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			if _, ok := r.(runtime.Error); ok {
@@ -1031,50 +1030,98 @@ func (p *Parser) ParseExpr() (e expr.Expr, err error) {
 	return
 }
 
-/*
-	func adjustPrecedence(e expr.Expr) expr.Expr {
-		switch e := e.(type) {
-		case *expr.Unary:
-			e.Expr = adjustPrecedence(e.Expr)
-			if e.Op == expr.NoOp {
-				return e
-			}
+var (
+	opPrecedence = []int{
+		sql.AddOp:          7,
+		sql.AndOp:          2,
+		sql.BinaryAndOp:    6,
+		sql.BinaryOrOp:     6,
+		sql.ConcatOp:       10,
+		sql.DivideOp:       8,
+		sql.EqualOp:        4,
+		sql.GreaterEqualOp: 5,
+		sql.GreaterThanOp:  5,
+		sql.LessEqualOp:    5,
+		sql.LessThanOp:     5,
+		sql.LShiftOp:       6,
+		sql.ModuloOp:       8,
+		sql.MultiplyOp:     8,
+		sql.NegateOp:       9,
+		sql.NoOp:           11,
+		sql.NotEqualOp:     4,
+		sql.NotOp:          3,
+		sql.OrOp:           1,
+		sql.RShiftOp:       6,
+		sql.SubtractOp:     7,
+	}
 
-			// - {2 * 3}  --> {- 2} * 3
-			if b, ok := e.Expr.(*expr.Binary); ok && b.Op.Precedence() < e.Op.Precedence() {
-				e.Expr = b.Left
-				b.Left = e
-				return adjustPrecedence(b)
-			}
-		case *expr.Binary:
-			e.Left = adjustPrecedence(e.Left)
-			e.Right = adjustPrecedence(e.Right)
+	binaryOps = map[rune]struct {
+		op     sql.Op
+		isBool bool
+	}{
+		token.Ampersand:      {sql.BinaryAndOp, false},
+		token.Bar:            {sql.BinaryOrOp, false},
+		token.BarBar:         {sql.ConcatOp, false},
+		token.Equal:          {sql.EqualOp, true},
+		token.EqualEqual:     {sql.EqualOp, true},
+		token.BangEqual:      {sql.NotEqualOp, true},
+		token.Greater:        {sql.GreaterThanOp, true},
+		token.GreaterEqual:   {sql.GreaterEqualOp, true},
+		token.GreaterGreater: {sql.RShiftOp, false},
+		token.Less:           {sql.LessThanOp, true},
+		token.LessEqual:      {sql.LessEqualOp, true},
+		token.LessGreater:    {sql.NotEqualOp, true},
+		token.LessLess:       {sql.LShiftOp, false},
+		token.Minus:          {sql.SubtractOp, false},
+		token.Percent:        {sql.ModuloOp, false},
+		token.Plus:           {sql.AddOp, false},
+		token.Slash:          {sql.DivideOp, false},
+		token.Star:           {sql.MultiplyOp, false},
+	}
+)
 
-			// 1 * {2 + 3} --> {1 * 2} + 3
-			if b, ok := e.Right.(*expr.Binary); ok && b.Op.Precedence() <= e.Op.Precedence() {
-				e.Right = b.Left
-				b.Left = e
-				return adjustPrecedence(b)
-			}
-
-			// {1 + 2} * 3 --> 1 + {2 * 3}
-			if b, ok := e.Left.(*expr.Binary); ok && b.Op.Precedence() < e.Op.Precedence() {
-				e.Left = b.Right
-				b.Right = e
-				return adjustPrecedence(b)
-			}
-		case *expr.Call:
-			for i, a := range e.Args {
-				e.Args[i] = adjustPrecedence(a)
-			}
+func adjustPrecedence(e sql.Expr) sql.Expr {
+	switch e := e.(type) {
+	case *sql.UnaryExpr:
+		e.Expr = adjustPrecedence(e.Expr)
+		if e.Op == sql.NoOp {
+			return e
 		}
 
-		return e
+		// - {2 * 3}  --> {- 2} * 3
+		if be, ok := e.Expr.(*sql.BinaryExpr); ok && opPrecedence[be.Op] < opPrecedence[e.Op] {
+			e.Expr = be.Left
+			be.Left = e
+			return adjustPrecedence(be)
+		}
+	case *sql.BinaryExpr:
+		e.Left = adjustPrecedence(e.Left)
+		e.Right = adjustPrecedence(e.Right)
+
+		// 1 * {2 + 3} --> {1 * 2} + 3
+		if be, ok := e.Right.(*sql.BinaryExpr); ok && opPrecedence[be.Op] <= opPrecedence[e.Op] {
+			e.Right = be.Left
+			be.Left = e
+			return adjustPrecedence(be)
+		}
+
+		// {1 + 2} * 3 --> 1 + {2 * 3}
+		if be, ok := e.Left.(*sql.BinaryExpr); ok && opPrecedence[be.Op] < opPrecedence[e.Op] {
+			e.Left = be.Right
+			be.Right = e
+			return adjustPrecedence(be)
+		}
+	case *sql.SExpr:
+		for idx, arg := range e.Args {
+			e.Args[idx] = adjustPrecedence(arg)
+		}
 	}
-*/
-func (p *Parser) parseExpr() expr.Expr {
-	return nil
-	/* return adjustPrecedence(p.parseSubExpr()) */
+
+	return e
+}
+
+func (p *Parser) parseExpr() sql.Expr {
+	return adjustPrecedence(p.parseSubExpr())
 }
 
 /*
@@ -1102,41 +1149,16 @@ op = '+' '-' '*' '/' '%'
 subquery = select | values | show
 */
 
-/* XXX
-var binaryOps = map[rune]struct {
-	op     expr.Op
-	isBool bool
-}{
-	token.Ampersand:      {expr.BinaryAndOp, false},
-	token.Bar:            {expr.BinaryOrOp, false},
-	token.BarBar:         {expr.ConcatOp, false},
-	token.Equal:          {expr.EqualOp, true},
-	token.EqualEqual:     {expr.EqualOp, true},
-	token.BangEqual:      {expr.NotEqualOp, true},
-	token.Greater:        {expr.GreaterThanOp, true},
-	token.GreaterEqual:   {expr.GreaterEqualOp, true},
-	token.GreaterGreater: {expr.RShiftOp, false},
-	token.Less:           {expr.LessThanOp, true},
-	token.LessEqual:      {expr.LessEqualOp, true},
-	token.LessGreater:    {expr.NotEqualOp, true},
-	token.LessLess:       {expr.LShiftOp, false},
-	token.Minus:          {expr.SubtractOp, false},
-	token.Percent:        {expr.ModuloOp, false},
-	token.Plus:           {expr.AddOp, false},
-	token.Slash:          {expr.DivideOp, false},
-	token.Star:           {expr.MultiplyOp, false},
-}
-
-func (p *Parser) optionalBinaryOp() (expr.Op, bool, bool) {
+func (p *Parser) optionalBinaryOp() (sql.Op, bool, bool) {
 	r := p.scan()
 	if bop, ok := binaryOps[r]; ok {
 		return bop.op, true, bop.isBool
 	} else if r == token.Reserved {
 		switch p.sctx.Identifier {
 		case types.AND:
-			return expr.AndOp, true, true
+			return sql.AndOp, true, true
 		case types.OR:
-			return expr.OrOp, true, true
+			return sql.OrOp, true, true
 		}
 	}
 
@@ -1144,46 +1166,46 @@ func (p *Parser) optionalBinaryOp() (expr.Op, bool, bool) {
 	return 0, false, false
 }
 
-func (p *Parser) parseSubExpr() expr.Expr {
-	var e expr.Expr
+func (p *Parser) parseSubExpr() sql.Expr {
+	var e sql.Expr
 	r := p.scan()
 	if r == token.Reserved {
 		if p.sctx.Identifier == types.TRUE {
-			e = expr.True()
+			e = sql.Literal{types.BoolValue(true)}
 		} else if p.sctx.Identifier == types.FALSE {
-			e = expr.False()
+			e = sql.Literal{types.BoolValue(false)}
 		} else if p.sctx.Identifier == types.NULL {
-			e = expr.Nil()
+			e = sql.Literal{nil}
 		} else if p.sctx.Identifier == types.NOT {
-			e = &expr.Unary{Op: expr.NotOp, Expr: p.parseSubExpr()}
+			e = &sql.UnaryExpr{Op: sql.NotOp, Expr: p.parseSubExpr()}
 		} else if p.sctx.Identifier == types.EXISTS {
 			// EXISTS ( subquery )
-			e = expr.Subquery{Op: expr.Exists, Stmt: p.parseSubquery()}
+			e = &sql.Subquery{Op: sql.Exists, Stmt: p.parseSubquery()}
 		} else {
 			p.error(fmt.Sprintf("unexpected identifier %s", p.sctx.Identifier))
 		}
 	} else if r == token.String {
-		e = expr.StringLiteral(p.sctx.String)
+		e = sql.Literal{types.StringValue(p.sctx.String)}
 	} else if r == token.Bytes {
-		e = expr.BytesLiteral(p.sctx.Bytes)
+		e = sql.Literal{types.BytesValue(p.sctx.Bytes)}
 	} else if r == token.Integer {
-		e = expr.Int64Literal(p.sctx.Integer)
+		e = sql.Literal{types.Int64Value(p.sctx.Integer)}
 	} else if r == token.Float {
-		e = expr.Float64Literal(p.sctx.Float)
-	} else if r == token.Parameter {
-		e = expr.Param{Num: int(p.sctx.Integer)}
+		e = sql.Literal{types.Float64Value(p.sctx.Float)}
+		/* XXX } else if r == token.Parameter {
+		e = sql.Param{Num: int(p.sctx.Integer)} */
 	} else if r == token.Identifier {
 		id := p.sctx.Identifier
 		if p.maybeToken(token.LParen) {
 			// func ( expr [,...] )
-			c := &expr.Call{Name: id}
+			se := &sql.SExpr{Name: id}
 			if !p.maybeToken(token.RParen) {
 				if id == types.COUNT && p.maybeToken(token.Star) {
 					p.expectTokens(token.RParen)
-					c.Name = types.COUNT_ALL
+					se.Name = types.COUNT_ALL
 				} else {
 					for {
-						c.Args = append(c.Args, p.parseSubExpr())
+						se.Args = append(se.Args, p.parseSubExpr())
 						if p.maybeToken(token.RParen) {
 							break
 						}
@@ -1191,10 +1213,10 @@ func (p *Parser) parseSubExpr() expr.Expr {
 					}
 				}
 			}
-			e = c
+			e = se
 		} else {
 			// ref [. ref]
-			ref := expr.Ref{p.sctx.Identifier}
+			ref := sql.Ref{p.sctx.Identifier}
 			for p.maybeToken(token.Dot) {
 				ref = append(ref, p.expectIdentifier("expected a reference"))
 			}
@@ -1202,14 +1224,14 @@ func (p *Parser) parseSubExpr() expr.Expr {
 		}
 	} else if r == token.Minus {
 		// - expr
-		e = &expr.Unary{Op: expr.NegateOp, Expr: p.parseSubExpr()}
+		e = &sql.UnaryExpr{Op: sql.NegateOp, Expr: p.parseSubExpr()}
 	} else if r == token.LParen {
 		if s, ok := p.optionalSubquery(); ok {
 			// ( subquery )
-			e = expr.Subquery{Op: expr.Scalar, Stmt: s}
+			e = &sql.Subquery{Op: sql.Scalar, Stmt: s}
 		} else {
 			// ( expr )
-			e = &expr.Unary{Op: expr.NoOp, Expr: p.parseSubExpr()}
+			e = &sql.UnaryExpr{Op: sql.NoOp, Expr: p.parseSubExpr()}
 		}
 		if p.scan() != token.RParen {
 			p.error(fmt.Sprintf("expected closing parenthesis, got %s", p.got()))
@@ -1223,11 +1245,11 @@ func (p *Parser) parseSubExpr() expr.Expr {
 		if p.optionalReserved(types.IN, types.NOT, types.IS) {
 			switch p.sctx.Identifier {
 			case types.IN:
-				return expr.Subquery{Op: expr.Any, ExprOp: expr.EqualOp, Expr: e,
+				return &sql.Subquery{Op: sql.Any, ExprOp: sql.EqualOp, Expr: e,
 					Stmt: p.parseSubquery()}
 			case types.NOT:
 				if p.optionalReserved(types.IN) {
-					return expr.Subquery{Op: expr.All, ExprOp: expr.NotEqualOp, Expr: e,
+					return &sql.Subquery{Op: sql.All, ExprOp: sql.NotEqualOp, Expr: e,
 						Stmt: p.parseSubquery()}
 				}
 				p.unscan()
@@ -1238,9 +1260,9 @@ func (p *Parser) parseSubExpr() expr.Expr {
 				}
 				p.expectReserved(types.NULL)
 
-				e = &expr.Call{Name: types.ID("is_null"), Args: []expr.Expr{e}}
+				e = &sql.SExpr{Name: types.ID("is_null", false), Args: []sql.Expr{e}}
 				if not {
-					return &expr.Unary{Op: expr.NotOp, Expr: e}
+					return &sql.UnaryExpr{Op: sql.NotOp, Expr: e}
 				}
 				return e
 			}
@@ -1253,19 +1275,19 @@ func (p *Parser) parseSubExpr() expr.Expr {
 		if !bop {
 			p.error("expected boolean binary operator")
 		}
-		var subqueryOp expr.SubqueryOp
+		var subqueryOp sql.SubqueryOp
 		if p.sctx.Identifier == types.ALL {
-			subqueryOp = expr.All
+			subqueryOp = sql.All
 		} else {
-			subqueryOp = expr.Any
+			subqueryOp = sql.Any
 		}
-		return expr.Subquery{Op: subqueryOp, ExprOp: op, Expr: e, Stmt: p.parseSubquery()}
+		return &sql.Subquery{Op: subqueryOp, ExprOp: op, Expr: e, Stmt: p.parseSubquery()}
 	}
 
-	return &expr.Binary{Op: op, Left: e, Right: p.parseSubExpr()}
+	return &sql.BinaryExpr{Op: op, Left: e, Right: p.parseSubExpr()}
 }
 
-func (p *Parser) parseSubquery() stmt.Stmt {
+func (p *Parser) parseSubquery() sql.Stmt {
 	p.expectTokens(token.LParen)
 	s, ok := p.optionalSubquery()
 	if !ok {
@@ -1274,15 +1296,14 @@ func (p *Parser) parseSubquery() stmt.Stmt {
 	p.expectTokens(token.RParen)
 	return s
 }
-*/
 
-func (p *Parser) parseInsert() stmt.Stmt {
+func (p *Parser) parseInsert() sql.Stmt {
 	/*
 		INSERT INTO [database '.'] table ['(' column [',' ...] ')']
 			VALUES '(' (expr | DEFAULT) [',' ...] ')' [',' ...]
 	*/
 
-	var s stmt.InsertValues
+	var s sql.InsertValues
 	s.Table = p.parseTableName()
 
 	if p.maybeToken(token.LParen) {
@@ -1304,7 +1325,7 @@ func (p *Parser) parseInsert() stmt.Stmt {
 	p.expectReserved(types.VALUES)
 
 	for {
-		var row []expr.Expr
+		var row []sql.Expr
 
 		p.expectTokens(token.LParen)
 		for {
@@ -1331,13 +1352,13 @@ func (p *Parser) parseInsert() stmt.Stmt {
 	return &s
 }
 
-func (p *Parser) parseCopy() stmt.Stmt {
+func (p *Parser) parseCopy() sql.Stmt {
 	/*
 		COPY [[database '.'] schema '.'] table '(' column [',' ...] ')' FROM STDIN
 			[DELIMITER delimiter]
 	*/
 
-	var s stmt.Copy
+	var s sql.Copy
 	s.Table = p.parseTableName()
 
 	if p.maybeToken(token.LParen) {
@@ -1376,14 +1397,14 @@ func (p *Parser) parseCopy() stmt.Stmt {
 	return &s
 }
 
-func (p *Parser) parseValues() *stmt.Values {
+func (p *Parser) parseValues() *sql.Values {
 	/*
 	   values = VALUES '(' expr [',' ...] ')' [',' ...]
 	*/
 
-	var s stmt.Values
+	var s sql.Values
 	for {
-		var row []expr.Expr
+		var row []sql.Expr
 
 		p.expectTokens(token.LParen)
 		for {
@@ -1422,8 +1443,8 @@ select-item = table '.' '*'
     | expr [[AS] column-alias]
 */
 
-func (p *Parser) parseSelect() *stmt.Select {
-	var s stmt.Select
+func (p *Parser) parseSelect() *sql.Select {
+	var s sql.Select
 	if !p.maybeToken(token.Star) {
 		for {
 			t := p.scan()
@@ -1432,7 +1453,7 @@ func (p *Parser) parseSelect() *stmt.Select {
 				if p.maybeToken(token.Dot) {
 					if p.maybeToken(token.Star) {
 						// table '.' *
-						s.Results = append(s.Results, stmt.TableResult{Table: tbl})
+						s.Results = append(s.Results, sql.TableResult{Table: tbl})
 
 						if !p.maybeToken(token.Comma) {
 							break
@@ -1445,7 +1466,7 @@ func (p *Parser) parseSelect() *stmt.Select {
 			p.unscan()
 
 			// expr [[ AS ] column-alias]
-			s.Results = append(s.Results, stmt.ExprResult{
+			s.Results = append(s.Results, sql.ExprResult{
 				Expr:  p.parseExpr(),
 				Alias: p.parseAlias(false),
 			})
@@ -1482,10 +1503,9 @@ func (p *Parser) parseSelect() *stmt.Select {
 	if p.optionalReserved(types.ORDER) {
 		p.expectReserved(types.BY)
 
-		/* XXX
 		for {
-			var by stmt.OrderBy
-			by.Expr = expr.Ref{p.expectIdentifier("expected a column")}
+			var by sql.OrderBy
+			by.Expr = sql.Ref{p.expectIdentifier("expected a column")}
 			if p.optionalReserved(types.DESC) {
 				by.Reverse = true
 			} else {
@@ -1496,7 +1516,6 @@ func (p *Parser) parseSelect() *stmt.Select {
 				break
 			}
 		}
-		*/
 	}
 
 	return &s
@@ -1514,8 +1533,8 @@ join-type = [INNER] JOIN
     | CROSS JOIN
 */
 
-func (p *Parser) parseFromItem() stmt.FromItem {
-	var fi stmt.FromItem
+func (p *Parser) parseFromItem() sql.FromItem {
+	var fi sql.FromItem
 	if p.maybeToken(token.LParen) {
 		if s, ok := p.optionalSubquery(); ok {
 			// ( subquery )
@@ -1528,34 +1547,34 @@ func (p *Parser) parseFromItem() stmt.FromItem {
 		fi = p.parseTableAlias()
 	}
 
-	jt := stmt.NoJoin
+	jt := sql.NoJoin
 	if p.optionalReserved(types.JOIN) {
-		jt = stmt.Join
+		jt = sql.Join
 	} else if p.optionalReserved(types.INNER) {
 		p.expectReserved(types.JOIN)
-		jt = stmt.Join
+		jt = sql.Join
 	} else if p.optionalReserved(types.LEFT) {
 		p.optionalReserved(types.OUTER)
-		jt = stmt.LeftJoin
+		jt = sql.LeftJoin
 		p.expectReserved(types.JOIN)
 	} else if p.optionalReserved(types.RIGHT) {
 		p.optionalReserved(types.OUTER)
-		jt = stmt.RightJoin
+		jt = sql.RightJoin
 		p.expectReserved(types.JOIN)
 	} else if p.optionalReserved(types.FULL) {
 		p.optionalReserved(types.OUTER)
-		jt = stmt.FullJoin
+		jt = sql.FullJoin
 		p.expectReserved(types.JOIN)
 	} else if p.optionalReserved(types.CROSS) {
 		p.expectReserved(types.JOIN)
-		jt = stmt.CrossJoin
+		jt = sql.CrossJoin
 	}
 
-	if jt == stmt.NoJoin {
+	if jt == sql.NoJoin {
 		return fi
 	}
 
-	fj := stmt.FromJoin{Left: fi, Right: p.parseFromItem(), Type: jt}
+	fj := sql.FromJoin{Left: fi, Right: p.parseFromItem(), Type: jt}
 	if p.optionalReserved(types.ON) {
 		fj.On = p.parseExpr()
 	} else if p.optionalReserved(types.USING) {
@@ -1575,12 +1594,12 @@ func (p *Parser) parseFromItem() stmt.FromItem {
 		}
 	}
 
-	if jt == stmt.Join || jt == stmt.LeftJoin || jt == stmt.RightJoin || jt == stmt.FullJoin {
+	if jt == sql.Join || jt == sql.LeftJoin || jt == sql.RightJoin || jt == sql.FullJoin {
 		if (fj.On != nil && fj.Using != nil) || (fj.On == nil && fj.Using == nil) {
 			p.error(fmt.Sprintf("%s must have one of ON or USING", jt))
 		}
 	}
-	if jt == stmt.CrossJoin {
+	if jt == sql.CrossJoin {
 		if fj.On != nil || fj.Using != nil {
 			p.error("CROSS JOIN may not have ON or USING")
 		}
@@ -1589,28 +1608,28 @@ func (p *Parser) parseFromItem() stmt.FromItem {
 	return fj
 }
 
-func (p *Parser) parseFromList() stmt.FromItem {
+func (p *Parser) parseFromList() sql.FromItem {
 	fi := p.parseFromItem()
 	for p.maybeToken(token.Comma) {
-		fi = stmt.FromJoin{Left: fi, Right: p.parseFromItem(), Type: stmt.CrossJoin}
+		fi = sql.FromJoin{Left: fi, Right: p.parseFromItem(), Type: sql.CrossJoin}
 	}
 	return fi
 }
 
-func (p *Parser) parseFromStmt(s stmt.Stmt) stmt.FromItem {
+func (p *Parser) parseFromStmt(s sql.Stmt) sql.FromItem {
 	p.expectTokens(token.RParen)
 	a := p.parseAlias(true)
-	return stmt.FromStmt{Stmt: s, Alias: a, ColumnAliases: p.parseColumnAliases()}
+	return sql.FromStmt{Stmt: s, Alias: a, ColumnAliases: p.parseColumnAliases()}
 }
 
-func (p *Parser) parseUpdate() stmt.Stmt {
+func (p *Parser) parseUpdate() sql.Stmt {
 	// UPDATE [database '.'] table SET column '=' (expr | DEFAULT) [',' ...] [WHERE expr]
-	var s stmt.Update
+	var s sql.Update
 	s.Table = p.parseTableName()
 	p.expectReserved(types.SET)
 
 	for {
-		var cu stmt.ColumnUpdate
+		var cu sql.ColumnUpdate
 		cu.Column = p.expectIdentifier("expected a column name")
 		p.expectTokens(token.Equal)
 		r := p.scan()
@@ -1633,11 +1652,10 @@ func (p *Parser) parseUpdate() stmt.Stmt {
 	return &s
 }
 
-func (p *Parser) parseSet() stmt.Stmt {
+func (p *Parser) parseSet() sql.Stmt {
 	return nil
-	/* XXX
 	// SET variable ( TO | '=' ) literal
-	var s stmt.Set
+	var s sql.Set
 
 	if p.optionalReserved(types.DATABASE) {
 		s.Variable = types.DATABASE
@@ -1650,7 +1668,7 @@ func (p *Parser) parseSet() stmt.Stmt {
 		p.expectReserved(types.TO)
 	}
 	e := p.parseExpr()
-	l, ok := e.(*expr.Literal)
+	l, ok := e.(sql.Literal)
 	if !ok {
 		p.error(fmt.Sprintf("expected a literal value, got %s", e.String()))
 	}
@@ -1661,39 +1679,31 @@ func (p *Parser) parseSet() stmt.Stmt {
 	}
 
 	return &s
-	*/
 }
 
-func (p *Parser) parseShowFromTable() (types.TableName, expr.Expr) {
-	return types.TableName{}, nil
-}
-
-/*
-func (p *Parser) parseShowFromTable() (types.TableName, *expr.Binary) {
+func (p *Parser) parseShowFromTable() (types.TableName, sql.Expr) {
 	tn := p.parseTableName()
 
-	var schemaTest *expr.Binary
+	var schemaTest *sql.BinaryExpr
 	if tn.Schema == 0 {
-		schemaTest = &expr.Binary{
-			Op:    expr.EqualOp,
-			Left:  expr.Ref{types.ID("schema_name")},
-			Right: expr.Subquery{Op: expr.Scalar, Stmt: &stmt.Show{Variable: types.SCHEMA}},
+		schemaTest = &sql.BinaryExpr{
+			Op:    sql.EqualOp,
+			Left:  sql.Ref{types.ID("schema_name", false)},
+			Right: &sql.Subquery{Op: sql.Scalar, Stmt: &sql.Show{Variable: types.SCHEMA}},
 		}
 	} else {
-		schemaTest = &expr.Binary{
-			Op:    expr.EqualOp,
-			Left:  expr.Ref{types.ID("schema_name")},
-			Right: expr.StringLiteral(tn.Schema.String()),
+		schemaTest = &sql.BinaryExpr{
+			Op:    sql.EqualOp,
+			Left:  sql.Ref{types.ID("schema_name", false)},
+			Right: &sql.Literal{types.StringValue(tn.Schema.String())},
 		}
 	}
 
 	return tn, schemaTest
 }
-*/
 
-func (p *Parser) parseShow() stmt.Stmt {
+func (p *Parser) parseShow() sql.Stmt {
 	return nil
-	/* XXX
 	// SHOW COLUMNS FROM [[database '.'] schema '.'] table
 	// SHOW CONFIG
 	// SHOW CONSTRAINTS FROM [[database '.'] schema '.'] table
@@ -1715,69 +1725,69 @@ func (p *Parser) parseShow() stmt.Stmt {
 		p.expectReserved(types.FROM)
 		tn, schemaTest := p.parseShowFromTable()
 
-		return &stmt.Select{
-			From: &stmt.FromTableAlias{
+		return &sql.Select{
+			From: &sql.FromTableAlias{
 				TableName: types.TableName{
 					Database: tn.Database,
 					Schema:   types.METADATA,
 					Table:    types.COLUMNS,
 				},
 			},
-			Where: &expr.Binary{
-				Op: expr.AndOp,
-				Left: &expr.Binary{
-					Op:    expr.EqualOp,
-					Left:  expr.Ref{types.ID("table_name")},
-					Right: expr.StringLiteral(tn.Table.String()),
+			Where: &sql.BinaryExpr{
+				Op: sql.AndOp,
+				Left: &sql.BinaryExpr{
+					Op:    sql.EqualOp,
+					Left:  sql.Ref{types.ID("table_name", false)},
+					Right: sql.Literal{types.StringValue(tn.Table.String())},
 				},
 				Right: schemaTest,
 			},
 		}
 	case types.CONFIG:
-		return &stmt.Select{
-			Results: []stmt.SelectResult{
-				stmt.ExprResult{Expr: expr.Ref{types.ID("name")}},
-				stmt.ExprResult{Expr: expr.Ref{types.ID("value")}},
-				stmt.ExprResult{Expr: expr.Ref{types.ID("by")}},
+		return &sql.Select{
+			Results: []sql.SelectResult{
+				sql.ExprResult{Expr: sql.Ref{types.ID("name", false)}},
+				sql.ExprResult{Expr: sql.Ref{types.ID("value", false)}},
+				sql.ExprResult{Expr: sql.Ref{types.ID("by", false)}},
 			},
-			From: &stmt.FromTableAlias{
+			From: &sql.FromTableAlias{
 				TableName: types.TableName{
 					Database: types.SYSTEM,
 					Schema:   types.INFO,
 					Table:    types.CONFIG,
 				},
 			},
-			Where: &expr.Binary{
-				Op:    expr.EqualOp,
-				Left:  expr.Ref{types.ID("hidden")},
-				Right: expr.False(),
+			Where: &sql.BinaryExpr{
+				Op:    sql.EqualOp,
+				Left:  sql.Ref{types.ID("hidden", false)},
+				Right: sql.Literal{types.BoolValue(false)},
 			},
 		}
 	case types.CONSTRAINTS:
 		p.expectReserved(types.FROM)
 		tn, schemaTest := p.parseShowFromTable()
 
-		return &stmt.Select{
-			From: &stmt.FromTableAlias{
+		return &sql.Select{
+			From: &sql.FromTableAlias{
 				TableName: types.TableName{
 					Database: tn.Database,
 					Schema:   types.METADATA,
 					Table:    types.CONSTRAINTS,
 				},
 			},
-			Where: &expr.Binary{
-				Op: expr.AndOp,
-				Left: &expr.Binary{
-					Op:    expr.EqualOp,
-					Left:  expr.Ref{types.ID("table_name")},
-					Right: expr.StringLiteral(tn.Table.String()),
+			Where: &sql.BinaryExpr{
+				Op: sql.AndOp,
+				Left: &sql.BinaryExpr{
+					Op:    sql.EqualOp,
+					Left:  sql.Ref{types.ID("table_name", false)},
+					Right: sql.Literal{types.StringValue(tn.Table.String())},
 				},
 				Right: schemaTest,
 			},
 		}
 	case types.DATABASES:
-		return &stmt.Select{
-			From: &stmt.FromTableAlias{
+		return &sql.Select{
+			From: &sql.FromTableAlias{
 				TableName: types.TableName{
 					Database: types.SYSTEM,
 					Schema:   types.INFO,
@@ -1790,8 +1800,8 @@ func (p *Parser) parseShow() stmt.Stmt {
 		if p.optionalReserved(types.FROM) {
 			db = p.expectIdentifier("expected a database")
 		}
-		return &stmt.Select{
-			From: &stmt.FromTableAlias{
+		return &sql.Select{
+			From: &sql.FromTableAlias{
 				TableName: types.TableName{
 					Database: db,
 					Schema:   types.METADATA,
@@ -1801,24 +1811,24 @@ func (p *Parser) parseShow() stmt.Stmt {
 		}
 	case types.TABLES:
 		var sn types.SchemaName
-		var where *expr.Binary
+		var where *sql.BinaryExpr
 
 		if p.optionalReserved(types.FROM) {
 			sn = p.parseSchemaName()
-			where = &expr.Binary{
-				Op:    expr.EqualOp,
-				Left:  expr.Ref{types.ID("schema_name")},
-				Right: expr.StringLiteral(sn.Schema.String()),
+			where = &sql.BinaryExpr{
+				Op:    sql.EqualOp,
+				Left:  sql.Ref{types.ID("schema_name", false)},
+				Right: sql.Literal{types.StringValue(sn.Schema.String())},
 			}
 		} else {
-			where = &expr.Binary{
-				Op:    expr.EqualOp,
-				Left:  expr.Ref{types.ID("schema_name")},
-				Right: expr.Subquery{Op: expr.Scalar, Stmt: &stmt.Show{Variable: types.SCHEMA}},
+			where = &sql.BinaryExpr{
+				Op:    sql.EqualOp,
+				Left:  sql.Ref{types.ID("schema_name", false)},
+				Right: &sql.Subquery{Op: sql.Scalar, Stmt: &sql.Show{Variable: types.SCHEMA}},
 			}
 		}
-		return &stmt.Select{
-			From: &stmt.FromTableAlias{
+		return &sql.Select{
+			From: &sql.FromTableAlias{
 				TableName: types.TableName{
 					Database: sn.Database,
 					Schema:   types.METADATA,
@@ -1828,19 +1838,16 @@ func (p *Parser) parseShow() stmt.Stmt {
 			Where: where,
 		}
 	default:
-		return &stmt.Show{Variable: p.sctx.Identifier}
+		return &sql.Show{Variable: p.sctx.Identifier}
 	}
-	*/
 }
 
-func (p *Parser) parseUse() stmt.Stmt {
-	return nil
-	/* XXX
+func (p *Parser) parseUse() sql.Stmt {
 	// USE database
-	s := stmt.Set{Variable: types.DATABASE}
+	s := sql.Set{Variable: types.DATABASE}
 
 	e := p.parseExpr()
-	l, ok := e.(*expr.Literal)
+	l, ok := e.(sql.Literal)
 	if !ok {
 		p.error(fmt.Sprintf("expected a literal value, got %s", e.String()))
 	}
@@ -1851,7 +1858,6 @@ func (p *Parser) parseUse() stmt.Stmt {
 	}
 
 	return &s
-	*/
 }
 
 func (p *Parser) parseOptions() map[types.Identifier]string {
@@ -1890,10 +1896,10 @@ func (p *Parser) parseOptions() map[types.Identifier]string {
 	return options
 }
 
-func (p *Parser) parseCreateDatabase() stmt.Stmt {
+func (p *Parser) parseCreateDatabase() sql.Stmt {
 	// CREATE DATABASE database
 	//     [ WITH [ PATH [ '=' ] path ] ]
-	var s stmt.CreateDatabase
+	var s sql.CreateDatabase
 
 	s.Database = p.expectIdentifier("expected a database")
 	if p.optionalReserved(types.WITH) {
@@ -1902,9 +1908,9 @@ func (p *Parser) parseCreateDatabase() stmt.Stmt {
 	return &s
 }
 
-func (p *Parser) parseDropDatabase() stmt.Stmt {
+func (p *Parser) parseDropDatabase() sql.Stmt {
 	// DROP DATABASE [IF EXISTS] database
-	var s stmt.DropDatabase
+	var s sql.DropDatabase
 
 	if p.optionalReserved(types.IF) {
 		p.expectReserved(types.EXISTS)
@@ -1915,17 +1921,17 @@ func (p *Parser) parseDropDatabase() stmt.Stmt {
 	return &s
 }
 
-func (p *Parser) parseCreateSchema() stmt.Stmt {
+func (p *Parser) parseCreateSchema() sql.Stmt {
 	// CREATE SCHEMA [database '.'] schema
-	var s stmt.CreateSchema
+	var s sql.CreateSchema
 
 	s.Schema = p.parseSchemaName()
 	return &s
 }
 
-func (p *Parser) parseDropSchema() stmt.Stmt {
+func (p *Parser) parseDropSchema() sql.Stmt {
 	// DROP SCHEMA [IF EXISTS] [database '.'] schema
-	var s stmt.DropSchema
+	var s sql.DropSchema
 
 	if p.optionalReserved(types.IF) {
 		p.expectReserved(types.EXISTS)
@@ -1936,11 +1942,10 @@ func (p *Parser) parseDropSchema() stmt.Stmt {
 	return &s
 }
 
-/* XXX
-func (p *Parser) parseExplain() stmt.Stmt {
+func (p *Parser) parseExplain() sql.Stmt {
 	// EXPLAIN [VERBOSE] select
 
-	var s stmt.Explain
+	var s sql.Explain
 	s.Verbose = p.optionalReserved(types.VERBOSE)
 	switch p.expectReserved(types.SELECT) {
 	case types.SELECT:
@@ -1951,10 +1956,11 @@ func (p *Parser) parseExplain() stmt.Stmt {
 	return s
 }
 
-func (p *Parser) parsePrepare() stmt.Stmt {
+/* XXX
+func (p *Parser) parsePrepare() sql.Stmt {
 	// PREPARE name AS (delete | insert | select | update | values)
 
-	var s stmt.Prepare
+	var s sql.Prepare
 	s.Name = p.expectIdentifier("expected a prepared statement")
 	p.expectReserved(types.AS)
 	switch p.expectReserved(types.DELETE, types.INSERT, types.SELECT, types.UPDATE, types.VALUES) {
@@ -1980,10 +1986,10 @@ func (p *Parser) parsePrepare() stmt.Stmt {
 	return &s
 }
 
-func (p *Parser) parseExecute() stmt.Stmt {
+func (p *Parser) parseExecute() sql.Stmt {
 	// EXECUTE name ['(' expr [',' ...] ')']
 
-	var s stmt.Execute
+	var s sql.Execute
 	s.Name = p.expectIdentifier("expected a prepared statement")
 	if p.maybeToken(token.LParen) {
 		for {

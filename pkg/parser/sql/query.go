@@ -1,10 +1,9 @@
-package stmt
+package sql
 
 import (
 	"fmt"
 	"io"
 
-	"github.com/leftmike/maho/pkg/parser/expr"
 	"github.com/leftmike/maho/pkg/types"
 )
 
@@ -88,7 +87,7 @@ func (stmt *Copy) String() string {
 
 type Delete struct {
 	Table types.TableName
-	Where expr.Expr
+	Where Expr
 }
 
 func (stmt *Delete) String() string {
@@ -102,7 +101,7 @@ func (stmt *Delete) String() string {
 type InsertValues struct {
 	Table   types.TableName
 	Columns []types.Identifier
-	Rows    [][]expr.Expr
+	Rows    [][]Expr
 }
 
 func (stmt *InsertValues) String() string {
@@ -146,13 +145,13 @@ func (stmt *InsertValues) String() string {
 
 type ColumnUpdate struct {
 	Column types.Identifier
-	Expr   expr.Expr
+	Expr   Expr
 }
 
 type Update struct {
 	Table         types.TableName
 	ColumnUpdates []ColumnUpdate
-	Where         expr.Expr
+	Where         Expr
 }
 
 func (stmt *Update) String() string {
@@ -170,7 +169,7 @@ func (stmt *Update) String() string {
 }
 
 type Values struct {
-	Expressions [][]expr.Expr
+	Expressions [][]Expr
 }
 
 func (stmt *Values) String() string {
@@ -204,21 +203,21 @@ type TableResult struct {
 }
 
 type ExprResult struct {
-	Expr  expr.Expr
+	Expr  Expr
 	Alias types.Identifier
 }
 
 type OrderBy struct {
-	Expr    expr.Expr
+	Expr    Expr
 	Reverse bool
 }
 
 type Select struct {
 	Results []SelectResult
 	From    FromItem
-	Where   expr.Expr
-	GroupBy []expr.Expr
-	Having  expr.Expr
+	Where   Expr
+	GroupBy []Expr
+	Having  Expr
 	OrderBy []OrderBy
 }
 
@@ -303,7 +302,7 @@ type FromJoin struct {
 	Left  FromItem
 	Right FromItem
 	Type  JoinType
-	On    expr.Expr
+	On    Expr
 	Using []types.Identifier
 }
 

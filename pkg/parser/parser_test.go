@@ -1,10 +1,27 @@
 package parser
 
 import (
+	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 
+	"github.com/leftmike/maho/pkg/parser/sql"
 	"github.com/leftmike/maho/pkg/parser/token"
+	"github.com/leftmike/maho/pkg/types"
+)
+
+func stringLiteral(s string) sql.Literal {
+	return sql.Literal{types.StringValue(s)}
+}
+
+func int64Literal(i int64) sql.Literal {
+	return sql.Literal{types.Int64Value(i)}
+}
+
+var (
+	trueLiteral  = sql.Literal{types.BoolValue(true)}
+	falseLiteral = sql.Literal{types.BoolValue(false)}
 )
 
 func TestScan(t *testing.T) {
@@ -42,7 +59,6 @@ func TestScan(t *testing.T) {
 	}
 }
 
-/*
 func TestParse(t *testing.T) {
 	failed := []string{
 		"create foobar",
@@ -65,219 +81,247 @@ func TestParse(t *testing.T) {
 
 func TestCreateTable(t *testing.T) {
 	cases := []struct {
-		sql  string
-		stmt datadef.CreateTable
+		s    string
+		stmt sql.CreateTable
 		fail bool
 	}{
-		{sql: "create temp table t (c int)", fail: true},
-		{sql: "create temporary table t (c int)", fail: true},
-		{sql: "create table test ()", fail: true},
-		{sql: "create table test (c)", fail: true},
-		{sql: "create table (c int)", fail: true},
-		{sql: "create table t (c int, c bool)", fail: true},
-		{sql: "create table t (c int, d bool, c char(1))", fail: true},
-		{sql: "create table t (c int) default", fail: true},
-		{sql: "create table . (c int)", fail: true},
-		{sql: "create table .t (c int)", fail: true},
-		{sql: "create table d. (c int)", fail: true},
-		{sql: "create table t (c int, )", fail: true},
-		{sql: "create table t (c bool())", fail: true},
-		{sql: "create table t (c bool(1))", fail: true},
-		{sql: "create table t (c double())", fail: true},
-		{sql: "create table t (c double(1,2,3))", fail: true},
-		{sql: "create table t (c double(0))", fail: true},
-		{sql: "create table t (c double(256))", fail: true},
-		{sql: "create table t (c double(0,15))", fail: true},
-		{sql: "create table t (c double(256,15))", fail: true},
-		{sql: "create table t (c double(123,-1))", fail: true},
-		{sql: "create table t (c double(123,31))", fail: true},
-		{sql: "create table t (c int())", fail: true},
-		{sql: "create table t (c int(1,2))", fail: true},
-		{sql: "create table t (c int(0))", fail: true},
-		{sql: "create table t (c int(256))", fail: true},
-		{sql: "create table t (c char(1,2))", fail: true},
-		{sql: "create table t (c char(-1))", fail: true},
-		{sql: "create table t (c blob binary)", fail: true},
-		{sql: "create table t (c int binary)", fail: true},
-		{sql: "create table t (c bool binary)", fail: true},
-		{sql: "create table t (c char(123) binary)", fail: true},
-		{sql: "create table t (c double binary)", fail: true},
-		{sql: "create table t (c char null)", fail: true},
-		{sql: "create table t (c char null, d int)", fail: true},
-		{sql: "create table t (c char not null not null)", fail: true},
-		{sql: "create table t (c char default)", fail: true},
-		{sql: "create table t (c char default, d int)", fail: true},
-		{sql: "create table t (c int default 0 default 1)", fail: true},
+		{s: "create temp table t (c int)", fail: true},
+		{s: "create temporary table t (c int)", fail: true},
+		{s: "create table test ()", fail: true},
+		{s: "create table test (c)", fail: true},
+		{s: "create table (c int)", fail: true},
+		{s: "create table t (c int, c bool)", fail: true},
+		{s: "create table t (c int, d bool, c char(1))", fail: true},
+		{s: "create table t (c int) default", fail: true},
+		{s: "create table . (c int)", fail: true},
+		{s: "create table .t (c int)", fail: true},
+		{s: "create table d. (c int)", fail: true},
+		{s: "create table t (c int, )", fail: true},
+		{s: "create table t (c bool())", fail: true},
+		{s: "create table t (c bool(1))", fail: true},
+		{s: "create table t (c double())", fail: true},
+		{s: "create table t (c double(1,2,3))", fail: true},
+		{s: "create table t (c double(0))", fail: true},
+		{s: "create table t (c double(256))", fail: true},
+		{s: "create table t (c double(0,15))", fail: true},
+		{s: "create table t (c double(256,15))", fail: true},
+		{s: "create table t (c double(123,-1))", fail: true},
+		{s: "create table t (c double(123,31))", fail: true},
+		{s: "create table t (c int())", fail: true},
+		{s: "create table t (c int(1,2))", fail: true},
+		{s: "create table t (c int(0))", fail: true},
+		{s: "create table t (c int(256))", fail: true},
+		{s: "create table t (c char(1,2))", fail: true},
+		{s: "create table t (c char(-1))", fail: true},
+		{s: "create table t (c blob binary)", fail: true},
+		{s: "create table t (c int binary)", fail: true},
+		{s: "create table t (c bool binary)", fail: true},
+		{s: "create table t (c char(123) binary)", fail: true},
+		{s: "create table t (c double binary)", fail: true},
+		{s: "create table t (c char null)", fail: true},
+		{s: "create table t (c char null, d int)", fail: true},
+		{s: "create table t (c char not null not null)", fail: true},
+		{s: "create table t (c char default)", fail: true},
+		{s: "create table t (c char default, d int)", fail: true},
+		{s: "create table t (c int default 0 default 1)", fail: true},
 		{
-			sql: "create table t (c1 int2, c2 smallint, c3 int4, c4 integer, c5 bigint, c6 int8)",
-			stmt: datadef.CreateTable{
-				Table: sql.TableName{Table: sql.ID("t")},
-				Columns: []sql.Identifier{sql.ID("c1"), sql.ID("c2"), sql.ID("c3"), sql.ID("c4"),
-					sql.ID("c5"), sql.ID("c6")},
-				ColumnTypes: []sql.ColumnType{
-					{Type: sql.IntegerType, Size: 2},
-					{Type: sql.IntegerType, Size: 2},
-					{Type: sql.IntegerType, Size: 4},
-					{Type: sql.IntegerType, Size: 4},
-					{Type: sql.IntegerType, Size: 8},
-					{Type: sql.IntegerType, Size: 8},
+			s: "create table t (c1 int2, c2 smallint, c3 int4, c4 integer, c5 bigint, c6 int8)",
+			stmt: sql.CreateTable{
+				Table: types.TableName{Table: types.ID("t", false)},
+				Columns: []types.Identifier{
+					types.ID("c1", false),
+					types.ID("c2", false),
+					types.ID("c3", false),
+					types.ID("c4", false),
+					types.ID("c5", false),
+					types.ID("c6", false),
 				},
-				ColumnDefaults: []expr.Expr{nil, nil, nil, nil, nil, nil},
+				ColumnTypes: []types.ColumnType{
+					{Type: types.Int64Type, Size: 2},
+					{Type: types.Int64Type, Size: 2},
+					{Type: types.Int64Type, Size: 4},
+					{Type: types.Int64Type, Size: 4},
+					{Type: types.Int64Type, Size: 8},
+					{Type: types.Int64Type, Size: 8},
+				},
+				ColumnDefaults: []sql.Expr{nil, nil, nil, nil, nil, nil},
 			},
 		},
 		{
-			sql: "create table if not exists t (c int)",
-			stmt: datadef.CreateTable{
-				Table:          sql.TableName{Table: sql.ID("t")},
-				Columns:        []sql.Identifier{sql.ID("c")},
-				ColumnTypes:    []sql.ColumnType{{Type: sql.IntegerType, Size: 4}},
-				ColumnDefaults: []expr.Expr{nil},
+			s: "create table if not exists t (c int)",
+			stmt: sql.CreateTable{
+				Table:          types.TableName{Table: types.ID("t", false)},
+				Columns:        []types.Identifier{types.ID("c", false)},
+				ColumnTypes:    []types.ColumnType{{Type: types.Int64Type, Size: 4}},
+				ColumnDefaults: []sql.Expr{nil},
 				IfNotExists:    true,
 			},
 		},
 		{
-			sql: "create table t (b1 bool, b2 boolean, d1 double, d2 double)",
-			stmt: datadef.CreateTable{
-				Table:   sql.TableName{Table: sql.ID("t")},
-				Columns: []sql.Identifier{sql.ID("b1"), sql.ID("b2"), sql.ID("d1"), sql.ID("d2")},
-				ColumnTypes: []sql.ColumnType{
-					{Type: sql.BooleanType, Size: 1},
-					{Type: sql.BooleanType, Size: 1},
-					{Type: sql.FloatType, Size: 8},
-					{Type: sql.FloatType, Size: 8},
+			s: "create table t (b1 bool, b2 boolean, d1 double, d2 double)",
+			stmt: sql.CreateTable{
+				Table: types.TableName{Table: types.ID("t", false)},
+				Columns: []types.Identifier{
+					types.ID("b1", false),
+					types.ID("b2", false),
+					types.ID("d1", false),
+					types.ID("d2", false),
 				},
-				ColumnDefaults: []expr.Expr{nil, nil, nil, nil},
+				ColumnTypes: []types.ColumnType{
+					{Type: types.BoolType, Size: 1},
+					{Type: types.BoolType, Size: 1},
+					{Type: types.Float64Type, Size: 8},
+					{Type: types.Float64Type, Size: 8},
+				},
+				ColumnDefaults: []sql.Expr{nil, nil, nil, nil},
 			},
 		},
 		{
-			sql: "create table t (b1 binary, b2 varbinary(123), b3 blob, b4 bytes, b5 bytea)",
-			stmt: datadef.CreateTable{
-				Table: sql.TableName{Table: sql.ID("t")},
-				Columns: []sql.Identifier{sql.ID("b1"), sql.ID("b2"), sql.ID("b3"), sql.ID("b4"),
-					sql.ID("b5")},
-				ColumnTypes: []sql.ColumnType{
-					{Type: sql.BytesType, Fixed: true, Size: 1},
-					{Type: sql.BytesType, Fixed: false, Size: 123},
-					{Type: sql.BytesType, Fixed: false, Size: sql.MaxColumnSize},
-					{Type: sql.BytesType, Fixed: false, Size: sql.MaxColumnSize},
-					{Type: sql.BytesType, Fixed: false, Size: sql.MaxColumnSize},
+			s: "create table t (b1 binary, b2 varbinary(123), b3 blob, b4 bytes, b5 bytea)",
+			stmt: sql.CreateTable{
+				Table: types.TableName{Table: types.ID("t", false)},
+				Columns: []types.Identifier{
+					types.ID("b1", false),
+					types.ID("b2", false),
+					types.ID("b3", false),
+					types.ID("b4", false),
+					types.ID("b5", false),
 				},
-				ColumnDefaults: []expr.Expr{nil, nil, nil, nil, nil},
+				ColumnTypes: []types.ColumnType{
+					{Type: types.BytesType, Fixed: true, Size: 1},
+					{Type: types.BytesType, Fixed: false, Size: 123},
+					{Type: types.BytesType, Fixed: false, Size: types.MaxColumnSize},
+					{Type: types.BytesType, Fixed: false, Size: types.MaxColumnSize},
+					{Type: types.BytesType, Fixed: false, Size: types.MaxColumnSize},
+				},
+				ColumnDefaults: []sql.Expr{nil, nil, nil, nil, nil},
 			},
 		},
 		{
-			sql: "create table t (b1 binary(123), b2 varbinary(456), b3 blob(789))",
-			stmt: datadef.CreateTable{
-				Table:   sql.TableName{Table: sql.ID("t")},
-				Columns: []sql.Identifier{sql.ID("b1"), sql.ID("b2"), sql.ID("b3")},
-				ColumnTypes: []sql.ColumnType{
-					{Type: sql.BytesType, Fixed: true, Size: 123},
-					{Type: sql.BytesType, Fixed: false, Size: 456},
-					{Type: sql.BytesType, Fixed: false, Size: 789},
+			s: "create table t (b1 binary(123), b2 varbinary(456), b3 blob(789))",
+			stmt: sql.CreateTable{
+				Table: types.TableName{Table: types.ID("t", false)},
+				Columns: []types.Identifier{
+					types.ID("b1", false),
+					types.ID("b2", false),
+					types.ID("b3", false),
 				},
-				ColumnDefaults: []expr.Expr{nil, nil, nil},
+				ColumnTypes: []types.ColumnType{
+					{Type: types.BytesType, Fixed: true, Size: 123},
+					{Type: types.BytesType, Fixed: false, Size: 456},
+					{Type: types.BytesType, Fixed: false, Size: 789},
+				},
+				ColumnDefaults: []sql.Expr{nil, nil, nil},
 			},
 		},
 		{
-			sql: "create table t (b1 bytea(456), b2 bytes(789))",
-			stmt: datadef.CreateTable{
-				Table:   sql.TableName{Table: sql.ID("t")},
-				Columns: []sql.Identifier{sql.ID("b1"), sql.ID("b2")},
-				ColumnTypes: []sql.ColumnType{
-					{Type: sql.BytesType, Fixed: false, Size: 456},
-					{Type: sql.BytesType, Fixed: false, Size: 789},
+			s: "create table t (b1 bytea(456), b2 bytes(789))",
+			stmt: sql.CreateTable{
+				Table:   types.TableName{Table: types.ID("t", false)},
+				Columns: []types.Identifier{types.ID("b1", false), types.ID("b2", false)},
+				ColumnTypes: []types.ColumnType{
+					{Type: types.BytesType, Fixed: false, Size: 456},
+					{Type: types.BytesType, Fixed: false, Size: 789},
 				},
-				ColumnDefaults: []expr.Expr{nil, nil},
+				ColumnDefaults: []sql.Expr{nil, nil},
 			},
 		},
 		{
-			sql: "create table t (c1 char, c2 varchar(123), c3 text)",
-			stmt: datadef.CreateTable{
-				Table:   sql.TableName{Table: sql.ID("t")},
-				Columns: []sql.Identifier{sql.ID("c1"), sql.ID("c2"), sql.ID("c3")},
-				ColumnTypes: []sql.ColumnType{
-					{Type: sql.StringType, Fixed: true, Size: 1},
-					{Type: sql.StringType, Fixed: false, Size: 123},
-					{Type: sql.StringType, Fixed: false, Size: sql.MaxColumnSize},
+			s: "create table t (c1 char, c2 varchar(123), c3 text)",
+			stmt: sql.CreateTable{
+				Table: types.TableName{Table: types.ID("t", false)},
+				Columns: []types.Identifier{
+					types.ID("c1", false),
+					types.ID("c2", false),
+					types.ID("c3", false),
 				},
-				ColumnDefaults: []expr.Expr{nil, nil, nil},
+				ColumnTypes: []types.ColumnType{
+					{Type: types.StringType, Fixed: true, Size: 1},
+					{Type: types.StringType, Fixed: false, Size: 123},
+					{Type: types.StringType, Fixed: false, Size: types.MaxColumnSize},
+				},
+				ColumnDefaults: []sql.Expr{nil, nil, nil},
 			},
 		},
 		{
-			sql: "create table t (c1 char(123), c2 varchar(456), c3 text(789))",
-			stmt: datadef.CreateTable{
-				Table:   sql.TableName{Table: sql.ID("t")},
-				Columns: []sql.Identifier{sql.ID("c1"), sql.ID("c2"), sql.ID("c3")},
-				ColumnTypes: []sql.ColumnType{
-					{Type: sql.StringType, Fixed: true, Size: 123},
-					{Type: sql.StringType, Fixed: false, Size: 456},
-					{Type: sql.StringType, Fixed: false, Size: 789},
+			s: "create table t (c1 char(123), c2 varchar(456), c3 text(789))",
+			stmt: sql.CreateTable{
+				Table: types.TableName{Table: types.ID("t", false)},
+				Columns: []types.Identifier{
+					types.ID("c1", false),
+					types.ID("c2", false),
+					types.ID("c3", false),
 				},
-				ColumnDefaults: []expr.Expr{nil, nil, nil},
+				ColumnTypes: []types.ColumnType{
+					{Type: types.StringType, Fixed: true, Size: 123},
+					{Type: types.StringType, Fixed: false, Size: 456},
+					{Type: types.StringType, Fixed: false, Size: 789},
+				},
+				ColumnDefaults: []sql.Expr{nil, nil, nil},
 			},
 		},
 		{
-			sql: "create table t (c1 varchar(64) default 'abcd', c2 int default 123)",
-			stmt: datadef.CreateTable{
-				Table:   sql.TableName{Table: sql.ID("t")},
-				Columns: []sql.Identifier{sql.ID("c1"), sql.ID("c2")},
-				ColumnTypes: []sql.ColumnType{
-					{Type: sql.StringType, Fixed: false, Size: 64},
-					{Type: sql.IntegerType, Size: 4},
+			s: "create table t (c1 varchar(64) default 'abcd', c2 int default 123)",
+			stmt: sql.CreateTable{
+				Table:   types.TableName{Table: types.ID("t", false)},
+				Columns: []types.Identifier{types.ID("c1", false), types.ID("c2", false)},
+				ColumnTypes: []types.ColumnType{
+					{Type: types.StringType, Fixed: false, Size: 64},
+					{Type: types.Int64Type, Size: 4},
 				},
-				ColumnDefaults: []expr.Expr{expr.StringLiteral("abcd"), expr.Int64Literal(123)},
+				ColumnDefaults: []sql.Expr{stringLiteral("abcd"), int64Literal(123)},
 			},
 		},
 		{
-			sql: "create table t (c1 boolean default true, c2 boolean not null)",
-			stmt: datadef.CreateTable{
-				Table:   sql.TableName{Table: sql.ID("t")},
-				Columns: []sql.Identifier{sql.ID("c1"), sql.ID("c2")},
-				ColumnTypes: []sql.ColumnType{
-					{Type: sql.BooleanType, Size: 1},
-					{Type: sql.BooleanType, Size: 1, NotNull: true},
+			s: "create table t (c1 boolean default true, c2 boolean not null)",
+			stmt: sql.CreateTable{
+				Table:   types.TableName{Table: types.ID("t", false)},
+				Columns: []types.Identifier{types.ID("c1", false), types.ID("c2", false)},
+				ColumnTypes: []types.ColumnType{
+					{Type: types.BoolType, Size: 1},
+					{Type: types.BoolType, Size: 1, NotNull: true},
 				},
-				ColumnDefaults: []expr.Expr{expr.True(), nil},
+				ColumnDefaults: []sql.Expr{trueLiteral, nil},
 			},
 		},
 		{
-			sql: `create table t (c1 boolean default true not null,
+			s: `create table t (c1 boolean default true not null,
 c2 boolean not null default true)`,
-			stmt: datadef.CreateTable{
-				Table:   sql.TableName{Table: sql.ID("t")},
-				Columns: []sql.Identifier{sql.ID("c1"), sql.ID("c2")},
-				ColumnTypes: []sql.ColumnType{
-					{Type: sql.BooleanType, Size: 1, NotNull: true},
-					{Type: sql.BooleanType, Size: 1, NotNull: true},
+			stmt: sql.CreateTable{
+				Table:   types.TableName{Table: types.ID("t", false)},
+				Columns: []types.Identifier{types.ID("c1", false), types.ID("c2", false)},
+				ColumnTypes: []types.ColumnType{
+					{Type: types.BoolType, Size: 1, NotNull: true},
+					{Type: types.BoolType, Size: 1, NotNull: true},
 				},
-				ColumnDefaults: []expr.Expr{expr.True(), expr.True()},
+				ColumnDefaults: []sql.Expr{trueLiteral, trueLiteral},
 			},
 		},
-		{sql: "create table t (c1 int primary, c2 bool)", fail: true},
-		{sql: "create table t (c1 int unique primary key, c2 bool)", fail: true},
-		{sql: "create table t (c1 int, c2 bool, primary)", fail: true},
-		{sql: "create table t (c1 int, c2 bool, primary key)", fail: true},
-		{sql: "create table t (c1 int, c2 bool, primary key ())", fail: true},
-		{sql: "create table t (c1 int primary key, c2 bool, primary key (c1))", fail: true},
-		{sql: "create table t (c1 int, c2 bool primary key, primary key (c1))", fail: true},
+		{s: "create table t (c1 int primary, c2 bool)", fail: true},
+		{s: "create table t (c1 int unique primary key, c2 bool)", fail: true},
+		{s: "create table t (c1 int, c2 bool, primary)", fail: true},
+		{s: "create table t (c1 int, c2 bool, primary key)", fail: true},
+		{s: "create table t (c1 int, c2 bool, primary key ())", fail: true},
+		{s: "create table t (c1 int primary key, c2 bool, primary key (c1))", fail: true},
+		{s: "create table t (c1 int, c2 bool primary key, primary key (c1))", fail: true},
 		{
-			sql: "create table t (c1 int primary key, c2 bool)",
-			stmt: datadef.CreateTable{
-				Table:   sql.TableName{Table: sql.ID("t")},
-				Columns: []sql.Identifier{sql.ID("c1"), sql.ID("c2")},
-				ColumnTypes: []sql.ColumnType{
-					{Type: sql.IntegerType, Size: 4},
-					{Type: sql.BooleanType, Size: 1},
+			s: "create table t (c1 int primary key, c2 bool)",
+			stmt: sql.CreateTable{
+				Table:   types.TableName{Table: types.ID("t", false)},
+				Columns: []types.Identifier{types.ID("c1", false), types.ID("c2", false)},
+				ColumnTypes: []types.ColumnType{
+					{Type: types.Int64Type, Size: 4},
+					{Type: types.BoolType, Size: 1},
 				},
-				ColumnDefaults: []expr.Expr{nil, nil},
-				Constraints: []datadef.Constraint{
+				ColumnDefaults: []sql.Expr{nil, nil},
+				Constraints: []sql.Constraint{
 					{
 						Type:   sql.PrimaryConstraint,
-						Name:   sql.ID("c1_primary"),
+						Name:   types.ID("c1_primary", false),
 						ColNum: -1,
-						Key: datadef.IndexKey{
+						Key: sql.IndexKey{
 							Unique:  true,
-							Columns: []sql.Identifier{sql.ID("c1")},
+							Columns: []types.Identifier{types.ID("c1", false)},
 							Reverse: []bool{false},
 						},
 					},
@@ -285,23 +329,23 @@ c2 boolean not null default true)`,
 			},
 		},
 		{
-			sql: "create table t (c1 int unique, c2 bool)",
-			stmt: datadef.CreateTable{
-				Table:   sql.TableName{Table: sql.ID("t")},
-				Columns: []sql.Identifier{sql.ID("c1"), sql.ID("c2")},
-				ColumnTypes: []sql.ColumnType{
-					{Type: sql.IntegerType, Size: 4},
-					{Type: sql.BooleanType, Size: 1},
+			s: "create table t (c1 int unique, c2 bool)",
+			stmt: sql.CreateTable{
+				Table:   types.TableName{Table: types.ID("t", false)},
+				Columns: []types.Identifier{types.ID("c1", false), types.ID("c2", false)},
+				ColumnTypes: []types.ColumnType{
+					{Type: types.Int64Type, Size: 4},
+					{Type: types.BoolType, Size: 1},
 				},
-				ColumnDefaults: []expr.Expr{nil, nil},
-				Constraints: []datadef.Constraint{
+				ColumnDefaults: []sql.Expr{nil, nil},
+				Constraints: []sql.Constraint{
 					{
 						Type:   sql.UniqueConstraint,
-						Name:   sql.ID("c1_unique"),
+						Name:   types.ID("c1_unique", false),
 						ColNum: -1,
-						Key: datadef.IndexKey{
+						Key: sql.IndexKey{
 							Unique:  true,
-							Columns: []sql.Identifier{sql.ID("c1")},
+							Columns: []types.Identifier{types.ID("c1", false)},
 							Reverse: []bool{false},
 						},
 					},
@@ -309,23 +353,23 @@ c2 boolean not null default true)`,
 			},
 		},
 		{
-			sql: "create table t (c1 int, c2 bool, primary key (c1))",
-			stmt: datadef.CreateTable{
-				Table:   sql.TableName{Table: sql.ID("t")},
-				Columns: []sql.Identifier{sql.ID("c1"), sql.ID("c2")},
-				ColumnTypes: []sql.ColumnType{
-					{Type: sql.IntegerType, Size: 4},
-					{Type: sql.BooleanType, Size: 1},
+			s: "create table t (c1 int, c2 bool, primary key (c1))",
+			stmt: sql.CreateTable{
+				Table:   types.TableName{Table: types.ID("t", false)},
+				Columns: []types.Identifier{types.ID("c1", false), types.ID("c2", false)},
+				ColumnTypes: []types.ColumnType{
+					{Type: types.Int64Type, Size: 4},
+					{Type: types.BoolType, Size: 1},
 				},
-				ColumnDefaults: []expr.Expr{nil, nil},
-				Constraints: []datadef.Constraint{
+				ColumnDefaults: []sql.Expr{nil, nil},
+				Constraints: []sql.Constraint{
 					{
 						Type:   sql.PrimaryConstraint,
-						Name:   sql.ID("c1_primary"),
+						Name:   types.ID("c1_primary", false),
 						ColNum: -1,
-						Key: datadef.IndexKey{
+						Key: sql.IndexKey{
 							Unique:  true,
-							Columns: []sql.Identifier{sql.ID("c1")},
+							Columns: []types.Identifier{types.ID("c1", false)},
 							Reverse: []bool{false},
 						},
 					},
@@ -333,23 +377,23 @@ c2 boolean not null default true)`,
 			},
 		},
 		{
-			sql: "create table t (c1 int, c2 bool, primary key (c1 desc))",
-			stmt: datadef.CreateTable{
-				Table:   sql.TableName{Table: sql.ID("t")},
-				Columns: []sql.Identifier{sql.ID("c1"), sql.ID("c2")},
-				ColumnTypes: []sql.ColumnType{
-					{Type: sql.IntegerType, Size: 4},
-					{Type: sql.BooleanType, Size: 1},
+			s: "create table t (c1 int, c2 bool, primary key (c1 desc))",
+			stmt: sql.CreateTable{
+				Table:   types.TableName{Table: types.ID("t", false)},
+				Columns: []types.Identifier{types.ID("c1", false), types.ID("c2", false)},
+				ColumnTypes: []types.ColumnType{
+					{Type: types.Int64Type, Size: 4},
+					{Type: types.BoolType, Size: 1},
 				},
-				ColumnDefaults: []expr.Expr{nil, nil},
-				Constraints: []datadef.Constraint{
+				ColumnDefaults: []sql.Expr{nil, nil},
+				Constraints: []sql.Constraint{
 					{
 						Type:   sql.PrimaryConstraint,
-						Name:   sql.ID("c1_primary"),
+						Name:   types.ID("c1_primary", false),
 						ColNum: -1,
-						Key: datadef.IndexKey{
+						Key: sql.IndexKey{
 							Unique:  true,
-							Columns: []sql.Identifier{sql.ID("c1")},
+							Columns: []types.Identifier{types.ID("c1", false)},
 							Reverse: []bool{true},
 						},
 					},
@@ -357,43 +401,46 @@ c2 boolean not null default true)`,
 			},
 		},
 		{
-			sql: "create table t (c1 int unique, c2 bool unique, primary key (c1 desc, c2 asc))",
-			stmt: datadef.CreateTable{
-				Table:   sql.TableName{Table: sql.ID("t")},
-				Columns: []sql.Identifier{sql.ID("c1"), sql.ID("c2")},
-				ColumnTypes: []sql.ColumnType{
-					{Type: sql.IntegerType, Size: 4},
-					{Type: sql.BooleanType, Size: 1},
+			s: "create table t (c1 int unique, c2 bool unique, primary key (c1 desc, c2 asc))",
+			stmt: sql.CreateTable{
+				Table:   types.TableName{Table: types.ID("t", false)},
+				Columns: []types.Identifier{types.ID("c1", false), types.ID("c2", false)},
+				ColumnTypes: []types.ColumnType{
+					{Type: types.Int64Type, Size: 4},
+					{Type: types.BoolType, Size: 1},
 				},
-				ColumnDefaults: []expr.Expr{nil, nil},
-				Constraints: []datadef.Constraint{
+				ColumnDefaults: []sql.Expr{nil, nil},
+				Constraints: []sql.Constraint{
 					{
 						Type:   sql.UniqueConstraint,
-						Name:   sql.ID("c1_unique"),
+						Name:   types.ID("c1_unique", false),
 						ColNum: -1,
-						Key: datadef.IndexKey{
+						Key: sql.IndexKey{
 							Unique:  true,
-							Columns: []sql.Identifier{sql.ID("c1")},
+							Columns: []types.Identifier{types.ID("c1", false)},
 							Reverse: []bool{false},
 						},
 					},
 					{
 						Type:   sql.UniqueConstraint,
-						Name:   sql.ID("c2_unique"),
+						Name:   types.ID("c2_unique", false),
 						ColNum: -1,
-						Key: datadef.IndexKey{
+						Key: sql.IndexKey{
 							Unique:  true,
-							Columns: []sql.Identifier{sql.ID("c2")},
+							Columns: []types.Identifier{types.ID("c2", false)},
 							Reverse: []bool{false},
 						},
 					},
 					{
 						Type:   sql.PrimaryConstraint,
-						Name:   sql.ID("c1_c2_primary"),
+						Name:   types.ID("c1_c2_primary", false),
 						ColNum: -1,
-						Key: datadef.IndexKey{
-							Unique:  true,
-							Columns: []sql.Identifier{sql.ID("c1"), sql.ID("c2")},
+						Key: sql.IndexKey{
+							Unique: true,
+							Columns: []types.Identifier{
+								types.ID("c1", false),
+								types.ID("c2", false),
+							},
 							Reverse: []bool{true, false},
 						},
 					},
@@ -401,33 +448,36 @@ c2 boolean not null default true)`,
 			},
 		},
 		{
-			sql: "create table t (c1 int primary key, c2 bool, unique (c2, c1))",
-			stmt: datadef.CreateTable{
-				Table:   sql.TableName{Table: sql.ID("t")},
-				Columns: []sql.Identifier{sql.ID("c1"), sql.ID("c2")},
-				ColumnTypes: []sql.ColumnType{
-					{Type: sql.IntegerType, Size: 4},
-					{Type: sql.BooleanType, Size: 1},
+			s: "create table t (c1 int primary key, c2 bool, unique (c2, c1))",
+			stmt: sql.CreateTable{
+				Table:   types.TableName{Table: types.ID("t", false)},
+				Columns: []types.Identifier{types.ID("c1", false), types.ID("c2", false)},
+				ColumnTypes: []types.ColumnType{
+					{Type: types.Int64Type, Size: 4},
+					{Type: types.BoolType, Size: 1},
 				},
-				ColumnDefaults: []expr.Expr{nil, nil},
-				Constraints: []datadef.Constraint{
+				ColumnDefaults: []sql.Expr{nil, nil},
+				Constraints: []sql.Constraint{
 					{
 						Type:   sql.PrimaryConstraint,
-						Name:   sql.ID("c1_primary"),
+						Name:   types.ID("c1_primary", false),
 						ColNum: -1,
-						Key: datadef.IndexKey{
+						Key: sql.IndexKey{
 							Unique:  true,
-							Columns: []sql.Identifier{sql.ID("c1")},
+							Columns: []types.Identifier{types.ID("c1", false)},
 							Reverse: []bool{false},
 						},
 					},
 					{
 						Type:   sql.UniqueConstraint,
-						Name:   sql.ID("c2_c1_unique"),
+						Name:   types.ID("c2_c1_unique", false),
 						ColNum: -1,
-						Key: datadef.IndexKey{
-							Unique:  true,
-							Columns: []sql.Identifier{sql.ID("c2"), sql.ID("c1")},
+						Key: sql.IndexKey{
+							Unique: true,
+							Columns: []types.Identifier{
+								types.ID("c2", false),
+								types.ID("c1", false),
+							},
 							Reverse: []bool{false, false},
 						},
 					},
@@ -435,34 +485,37 @@ c2 boolean not null default true)`,
 			},
 		},
 		{
-			sql: `create table t (c1 int constraint con1 primary key, c2 bool,
+			s: `create table t (c1 int constraint con1 primary key, c2 bool,
 constraint con2 unique (c2, c1))`,
-			stmt: datadef.CreateTable{
-				Table:   sql.TableName{Table: sql.ID("t")},
-				Columns: []sql.Identifier{sql.ID("c1"), sql.ID("c2")},
-				ColumnTypes: []sql.ColumnType{
-					{Type: sql.IntegerType, Size: 4},
-					{Type: sql.BooleanType, Size: 1},
+			stmt: sql.CreateTable{
+				Table:   types.TableName{Table: types.ID("t", false)},
+				Columns: []types.Identifier{types.ID("c1", false), types.ID("c2", false)},
+				ColumnTypes: []types.ColumnType{
+					{Type: types.Int64Type, Size: 4},
+					{Type: types.BoolType, Size: 1},
 				},
-				ColumnDefaults: []expr.Expr{nil, nil},
-				Constraints: []datadef.Constraint{
+				ColumnDefaults: []sql.Expr{nil, nil},
+				Constraints: []sql.Constraint{
 					{
 						Type:   sql.PrimaryConstraint,
-						Name:   sql.ID("con1"),
+						Name:   types.ID("con1", false),
 						ColNum: -1,
-						Key: datadef.IndexKey{
+						Key: sql.IndexKey{
 							Unique:  true,
-							Columns: []sql.Identifier{sql.ID("c1")},
+							Columns: []types.Identifier{types.ID("c1", false)},
 							Reverse: []bool{false},
 						},
 					},
 					{
 						Type:   sql.UniqueConstraint,
-						Name:   sql.ID("con2"),
+						Name:   types.ID("con2", false),
 						ColNum: -1,
-						Key: datadef.IndexKey{
-							Unique:  true,
-							Columns: []sql.Identifier{sql.ID("c2"), sql.ID("c1")},
+						Key: sql.IndexKey{
+							Unique: true,
+							Columns: []types.Identifier{
+								types.ID("c2", false),
+								types.ID("c1", false),
+							},
 							Reverse: []bool{false, false},
 						},
 					},
@@ -470,140 +523,140 @@ constraint con2 unique (c2, c1))`,
 			},
 		},
 		{
-			sql: `create table t (c1 int constraint not_null not null,
+			s: `create table t (c1 int constraint not_null not null,
 c2 bool constraint dflt default true)`,
-			stmt: datadef.CreateTable{
-				Table:   sql.TableName{Table: sql.ID("t")},
-				Columns: []sql.Identifier{sql.ID("c1"), sql.ID("c2")},
-				ColumnTypes: []sql.ColumnType{
-					{Type: sql.IntegerType, Size: 4, NotNull: true},
-					{Type: sql.BooleanType, Size: 1},
+			stmt: sql.CreateTable{
+				Table:   types.TableName{Table: types.ID("t", false)},
+				Columns: []types.Identifier{types.ID("c1", false), types.ID("c2", false)},
+				ColumnTypes: []types.ColumnType{
+					{Type: types.Int64Type, Size: 4, NotNull: true},
+					{Type: types.BoolType, Size: 1},
 				},
-				ColumnDefaults: []expr.Expr{nil, expr.True()},
-				Constraints: []datadef.Constraint{
-					{Type: sql.NotNullConstraint, Name: sql.ID("not_null"), ColNum: 0},
-					{Type: sql.DefaultConstraint, Name: sql.ID("dflt"), ColNum: 1},
+				ColumnDefaults: []sql.Expr{nil, trueLiteral},
+				Constraints: []sql.Constraint{
+					{Type: sql.NotNullConstraint, Name: types.ID("not_null", false), ColNum: 0},
+					{Type: sql.DefaultConstraint, Name: types.ID("dflt", false), ColNum: 1},
 				},
 			},
 		},
 		{
-			sql:  "create table t (c1 int not null constraint not_null, c2 bool)",
+			s:    "create table t (c1 int not null constraint not_null, c2 bool)",
 			fail: true,
 		},
 		{
-			sql:  "create table t (c1 int, c2 bool not null constraint not_null)",
+			s:    "create table t (c1 int, c2 bool not null constraint not_null)",
 			fail: true,
 		},
 		{
-			sql:  "create table t (c1 int constraint c1 constraint c1 not null, c2 bool)",
+			s:    "create table t (c1 int constraint c1 constraint c1 not null, c2 bool)",
 			fail: true,
 		},
 		{
-			sql:  "create table t (c1 int constraint c1, c2 bool)",
+			s:    "create table t (c1 int constraint c1, c2 bool)",
 			fail: true,
 		},
 		{
-			sql: `create table t (c1 int constraint c2_c1_unique primary key, c2 bool,
+			s: `create table t (c1 int constraint c2_c1_unique primary key, c2 bool,
 unique (c2, c1))`,
 			fail: true,
 		},
 		{
-			sql: `create table t (c1 int primary key, c2 bool,
+			s: `create table t (c1 int primary key, c2 bool,
 constraint c1_primary unique (c2, c1))`,
 			fail: true,
 		},
 		{
-			sql: "create table t (c1 int check(c1 > 1), check(c1 < c2), c2 int check(c2 > 2))",
-			stmt: datadef.CreateTable{
-				Table:   sql.TableName{Table: sql.ID("t")},
-				Columns: []sql.Identifier{sql.ID("c1"), sql.ID("c2")},
-				ColumnTypes: []sql.ColumnType{
-					{Type: sql.IntegerType, Size: 4},
-					{Type: sql.IntegerType, Size: 4},
+			s: "create table t (c1 int check(c1 > 1), check(c1 < c2), c2 int check(c2 > 2))",
+			stmt: sql.CreateTable{
+				Table:   types.TableName{Table: types.ID("t", false)},
+				Columns: []types.Identifier{types.ID("c1", false), types.ID("c2", false)},
+				ColumnTypes: []types.ColumnType{
+					{Type: types.Int64Type, Size: 4},
+					{Type: types.Int64Type, Size: 4},
 				},
-				ColumnDefaults: []expr.Expr{nil, nil},
-				Constraints: []datadef.Constraint{
+				ColumnDefaults: []sql.Expr{nil, nil},
+				Constraints: []sql.Constraint{
 					{
 						Type:   sql.CheckConstraint,
 						ColNum: 0,
-						Check: &expr.Binary{
-							Op:    expr.GreaterThanOp,
-							Left:  expr.Ref{sql.ID("c1")},
-							Right: expr.Int64Literal(1),
+						Check: &sql.BinaryExpr{
+							Op:    sql.GreaterThanOp,
+							Left:  sql.Ref{types.ID("c1", false)},
+							Right: int64Literal(1),
 						},
 					},
 					{
 						Type:   sql.CheckConstraint,
 						ColNum: -1,
-						Check: &expr.Binary{
-							Op:    expr.LessThanOp,
-							Left:  expr.Ref{sql.ID("c1")},
-							Right: expr.Ref{sql.ID("c2")},
+						Check: &sql.BinaryExpr{
+							Op:    sql.LessThanOp,
+							Left:  sql.Ref{types.ID("c1", false)},
+							Right: sql.Ref{types.ID("c2", false)},
 						},
 					},
 					{
 						Type:   sql.CheckConstraint,
 						ColNum: 1,
-						Check: &expr.Binary{
-							Op:    expr.GreaterThanOp,
-							Left:  expr.Ref{sql.ID("c2")},
-							Right: expr.Int64Literal(2),
+						Check: &sql.BinaryExpr{
+							Op:    sql.GreaterThanOp,
+							Left:  sql.Ref{types.ID("c2", false)},
+							Right: int64Literal(2),
 						},
 					},
 				},
 			},
 		},
 		{
-			sql: `create table t (c1 int constraint check_1 not null constraint check_2 default 1,
+			s: `create table t (c1 int constraint check_1 not null constraint check_2 default 1,
 c2 int check(true))`,
-			stmt: datadef.CreateTable{
-				Table:   sql.TableName{Table: sql.ID("t")},
-				Columns: []sql.Identifier{sql.ID("c1"), sql.ID("c2")},
-				ColumnTypes: []sql.ColumnType{
-					{Type: sql.IntegerType, Size: 4, NotNull: true},
-					{Type: sql.IntegerType, Size: 4},
+			stmt: sql.CreateTable{
+				Table:   types.TableName{Table: types.ID("t", false)},
+				Columns: []types.Identifier{types.ID("c1", false), types.ID("c2", false)},
+				ColumnTypes: []types.ColumnType{
+					{Type: types.Int64Type, Size: 4, NotNull: true},
+					{Type: types.Int64Type, Size: 4},
 				},
-				ColumnDefaults: []expr.Expr{expr.Int64Literal(1), nil},
-				Constraints: []datadef.Constraint{
+				ColumnDefaults: []sql.Expr{int64Literal(1), nil},
+				Constraints: []sql.Constraint{
 					{
 						Type:   sql.NotNullConstraint,
-						Name:   sql.ID("check_1"),
+						Name:   types.ID("check_1", false),
 						ColNum: 0,
 					},
 					{
 						Type:   sql.DefaultConstraint,
-						Name:   sql.ID("check_2"),
+						Name:   types.ID("check_2", false),
 						ColNum: 0,
 					},
 					{
 						Type:   sql.CheckConstraint,
 						ColNum: 1,
-						Check:  expr.True(),
+						Check:  trueLiteral,
 					},
 				},
 			},
 		},
 		{
-			sql: `create table t (c1 int references t2 on update cascade,
+			s: `create table t (c1 int references t2 on update cascade,
 c2 int references t3 (p1) on update set default on delete set null)`,
-			stmt: datadef.CreateTable{
-				Table:   sql.TableName{Table: sql.ID("t")},
-				Columns: []sql.Identifier{sql.ID("c1"), sql.ID("c2")},
-				ColumnTypes: []sql.ColumnType{
-					{Type: sql.IntegerType, Size: 4},
-					{Type: sql.IntegerType, Size: 4},
+			stmt: sql.CreateTable{
+				Table:   types.TableName{Table: types.ID("t", false)},
+				Columns: []types.Identifier{types.ID("c1", false), types.ID("c2", false)},
+				ColumnTypes: []types.ColumnType{
+					{Type: types.Int64Type, Size: 4},
+					{Type: types.Int64Type, Size: 4},
 				},
-				ColumnDefaults: []expr.Expr{nil, nil},
-				ForeignKeys: []*datadef.ForeignKey{
-					&datadef.ForeignKey{
-						FKCols:   []sql.Identifier{sql.ID("c1")},
-						RefTable: sql.TableName{Table: sql.ID("t2")},
+				ColumnDefaults: []sql.Expr{nil, nil},
+				ForeignKeys: []*sql.ForeignKey{
+					&sql.ForeignKey{
+						FKCols:   []types.Identifier{types.ID("c1", false)},
+						RefTable: types.TableName{Table: types.ID("t2", false)},
 						OnUpdate: sql.Cascade,
 					},
-					&datadef.ForeignKey{
-						FKCols:   []sql.Identifier{sql.ID("c2")},
-						RefTable: sql.TableName{Table: sql.ID("t3")},
-						RefCols:  []sql.Identifier{sql.ID("p1")},
+					&sql.ForeignKey{
+						FKCols:   []types.Identifier{types.ID("c2", false)},
+						RefTable: types.TableName{Table: types.ID("t3", false)},
+						RefCols:  []types.Identifier{types.ID("p1", false)},
 						OnDelete: sql.SetNull,
 						OnUpdate: sql.SetDefault,
 					},
@@ -611,161 +664,175 @@ c2 int references t3 (p1) on update set default on delete set null)`,
 			},
 		},
 		{
-			sql: `create table t (c1 int, c2 int, c3 int, c4 int constraint foreign_1 not null,
+			s: `create table t (c1 int, c2 int, c3 int, c4 int constraint foreign_1 not null,
 foreign key (c1, c2) references t2 on delete cascade,
 constraint fkey foreign key (c3, c4, c2) references t3 (p1, p2, p3) on update no action)`,
-			stmt: datadef.CreateTable{
-				Table:   sql.TableName{Table: sql.ID("t")},
-				Columns: []sql.Identifier{sql.ID("c1"), sql.ID("c2"), sql.ID("c3"), sql.ID("c4")},
-				ColumnTypes: []sql.ColumnType{
-					{Type: sql.IntegerType, Size: 4},
-					{Type: sql.IntegerType, Size: 4},
-					{Type: sql.IntegerType, Size: 4},
-					{Type: sql.IntegerType, Size: 4, NotNull: true},
+			stmt: sql.CreateTable{
+				Table: types.TableName{Table: types.ID("t", false)},
+				Columns: []types.Identifier{
+					types.ID("c1", false),
+					types.ID("c2", false),
+					types.ID("c3", false),
+					types.ID("c4", false),
 				},
-				ColumnDefaults: []expr.Expr{nil, nil, nil, nil},
-				Constraints: []datadef.Constraint{
+				ColumnTypes: []types.ColumnType{
+					{Type: types.Int64Type, Size: 4},
+					{Type: types.Int64Type, Size: 4},
+					{Type: types.Int64Type, Size: 4},
+					{Type: types.Int64Type, Size: 4, NotNull: true},
+				},
+				ColumnDefaults: []sql.Expr{nil, nil, nil, nil},
+				Constraints: []sql.Constraint{
 					{
 						Type:   sql.NotNullConstraint,
-						Name:   sql.ID("foreign_1"),
+						Name:   types.ID("foreign_1", false),
 						ColNum: 3,
 					},
 				},
-				ForeignKeys: []*datadef.ForeignKey{
-					&datadef.ForeignKey{
-						FKCols:   []sql.Identifier{sql.ID("c1"), sql.ID("c2")},
-						RefTable: sql.TableName{Table: sql.ID("t2")},
+				ForeignKeys: []*sql.ForeignKey{
+					&sql.ForeignKey{
+						FKCols:   []types.Identifier{types.ID("c1", false), types.ID("c2", false)},
+						RefTable: types.TableName{Table: types.ID("t2", false)},
 						OnDelete: sql.Cascade,
 					},
-					&datadef.ForeignKey{
-						Name:     sql.ID("fkey"),
-						FKCols:   []sql.Identifier{sql.ID("c3"), sql.ID("c4"), sql.ID("c2")},
-						RefTable: sql.TableName{Table: sql.ID("t3")},
-						RefCols:  []sql.Identifier{sql.ID("p1"), sql.ID("p2"), sql.ID("p3")},
+					&sql.ForeignKey{
+						Name: types.ID("fkey", false),
+						FKCols: []types.Identifier{
+							types.ID("c3", false),
+							types.ID("c4", false),
+							types.ID("c2", false),
+						},
+						RefTable: types.TableName{Table: types.ID("t3", false)},
+						RefCols: []types.Identifier{
+							types.ID("p1", false),
+							types.ID("p2", false),
+							types.ID("p3", false),
+						},
 						OnUpdate: sql.NoAction,
 					},
 				},
 			},
 		},
 		{
-			sql:  "create table t (c1 int, c2 int, c3 int, foreign key c1 references t2)",
+			s:    "create table t (c1 int, c2 int, c3 int, foreign key c1 references t2)",
 			fail: true,
 		},
 		{
-			sql:  "create table t (c1 int, c2 int, c3 int, foreign key (c1,) references t2)",
+			s:    "create table t (c1 int, c2 int, c3 int, foreign key (c1,) references t2)",
 			fail: true,
 		},
 		{
-			sql:  "create table t (c1 int, c2 int, c3 int, foreign key () references t2)",
+			s:    "create table t (c1 int, c2 int, c3 int, foreign key () references t2)",
 			fail: true,
 		},
 		{
-			sql:  "create table t (c1 int, c2 int, c3 int, foreign key references t2)",
+			s:    "create table t (c1 int, c2 int, c3 int, foreign key references t2)",
 			fail: true,
 		},
 		{
-			sql: `create table t (c1 int, c2 int, c3 int,
+			s: `create table t (c1 int, c2 int, c3 int,
 foreign key (c1, c2) references t2 p1)`,
 			fail: true,
 		},
 		{
-			sql: `create table t (c1 int, c2 int, c3 int,
+			s: `create table t (c1 int, c2 int, c3 int,
 foreign key (c1, c2) references t2 (p1,))`,
 			fail: true,
 		},
 		{
-			sql: `create table t (c1 int, c2 int, c3 int,
+			s: `create table t (c1 int, c2 int, c3 int,
 foreign key (c1, c2) t2 (p1, p2))`,
 			fail: true,
 		},
 		{
-			sql: `create table t (c1 int, c2 int, c3 int,
+			s: `create table t (c1 int, c2 int, c3 int,
 foreign (c1, c2) references t2 (p1, p2))`,
 			fail: true,
 		},
 		{
-			sql:  "create table t (c1 int references t2 p1, c2 int, c3 int)",
+			s:    "create table t (c1 int references t2 p1, c2 int, c3 int)",
 			fail: true,
 		},
 		{
-			sql:  "create table t (c1 int references t2 (p1, p2), c2 int, c3 int)",
+			s:    "create table t (c1 int references t2 (p1, p2), c2 int, c3 int)",
 			fail: true,
 		},
 		{
-			sql: `create table t (c1 int, c2 int, c3 int,
+			s: `create table t (c1 int, c2 int, c3 int,
 foreign key (c1) references t2 delete restrict)`,
 			fail: true,
 		},
 		{
-			sql: `create table t (c1 int, c2 int, c3 int,
+			s: `create table t (c1 int, c2 int, c3 int,
 foreign key (c1) references t2 on delete action)`,
 			fail: true,
 		},
 		{
-			sql: `create table t (c1 int, c2 int, c3 int,
+			s: `create table t (c1 int, c2 int, c3 int,
 foreign key (c1) references t2 on delete restrict on delete no action)`,
 			fail: true,
 		},
 		{
-			sql: `create table t (c1 int, c2 int, c3 int,
+			s: `create table t (c1 int, c2 int, c3 int,
 foreign key (c1) references t2 on delete restrict on update restrict on delete no action)`,
 			fail: true,
 		},
 		{
-			sql: `create table t (c1 int, c2 int, c3 int,
+			s: `create table t (c1 int, c2 int, c3 int,
 foreign key (c1) references t2 on delete set on update cascade)`,
 			fail: true,
 		},
 	}
 
 	for i, c := range cases {
-		p := NewParser(strings.NewReader(c.sql), fmt.Sprintf("tests[%d]", i))
+		p := NewParser(strings.NewReader(c.s), fmt.Sprintf("tests[%d]", i))
 		cs, err := p.Parse()
 		if c.fail {
 			if err == nil {
-				t.Errorf("Parse(%q) did not fail", c.sql)
+				t.Errorf("Parse(%q) did not fail", c.s)
 			}
 		} else {
 			if err != nil {
-				t.Errorf("Parse(%q) failed with %s", c.sql, err)
-			} else if cs, ok := cs.(*datadef.CreateTable); !ok ||
+				t.Errorf("Parse(%q) failed with %s", c.s, err)
+			} else if cs, ok := cs.(*sql.CreateTable); !ok ||
 				!reflect.DeepEqual(&c.stmt, cs) {
-				t.Errorf("Parse(%q) got %s want %s", c.sql, cs.String(), c.stmt.String())
+				t.Errorf("Parse(%q) got %s want %s", c.s, cs.String(), c.stmt.String())
 			}
 		}
 	}
 }
 
+/*
 func TestCreateIndex(t *testing.T) {
 	cases := []struct {
-		sql  string
-		stmt datadef.CreateIndex
+		s  string
+		stmt sql.CreateIndex
 		fail bool
 	}{
-		{sql: "create index unique idx on tbl (c1)", fail: true},
-		{sql: "create index idx tbl (c1)", fail: true},
-		{sql: "create index tbl (c1)", fail: true},
-		{sql: "create index idx on tbl using (c1 DESC, c2)", fail: true},
-		{sql: "create index idx on tbl using tree (c1 DESC, c2)", fail: true},
+		{s: "create index unique idx on tbl (c1)", fail: true},
+		{s: "create index idx tbl (c1)", fail: true},
+		{s: "create index tbl (c1)", fail: true},
+		{s: "create index idx on tbl using (c1 DESC, c2)", fail: true},
+		{s: "create index idx on tbl using tree (c1 DESC, c2)", fail: true},
 		{
-			sql: "create index idx on tbl (c1 DESC, c2)",
-			stmt: datadef.CreateIndex{
-				Table: sql.TableName{Table: sql.ID("tbl")},
-				Index: sql.ID("idx"),
-				Key: datadef.IndexKey{
-					Columns: []sql.Identifier{sql.ID("c1"), sql.ID("c2")},
+			s: "create index idx on tbl (c1 DESC, c2)",
+			stmt: sql.CreateIndex{
+				Table: types.TableName{Table: types.ID("tbl", false)},
+				Index: types.ID("idx", false),
+				Key: sql.IndexKey{
+					Columns: []types.Identifier{types.ID("c1", false), types.ID("c2", false)},
 					Reverse: []bool{true, false},
 				},
 			},
 		},
 		{
-			sql: "create unique index if not exists idx on tbl using btree (c1)",
-			stmt: datadef.CreateIndex{
-				Table: sql.TableName{Table: sql.ID("tbl")},
-				Index: sql.ID("idx"),
-				Key: datadef.IndexKey{
+			s: "create unique index if not exists idx on tbl using btree (c1)",
+			stmt: sql.CreateIndex{
+				Table: types.TableName{Table: types.ID("tbl", false)},
+				Index: types.ID("idx", false),
+				Key: sql.IndexKey{
 					Unique:  true,
-					Columns: []sql.Identifier{sql.ID("c1")},
+					Columns: []types.Identifier{types.ID("c1", false)},
 					Reverse: []bool{false},
 				},
 				IfNotExists: true,
@@ -774,18 +841,18 @@ func TestCreateIndex(t *testing.T) {
 	}
 
 	for i, c := range cases {
-		p := NewParser(strings.NewReader(c.sql), fmt.Sprintf("tests[%d]", i))
+		p := NewParser(strings.NewReader(c.s), fmt.Sprintf("tests[%d]", i))
 		cs, err := p.Parse()
 		if c.fail {
 			if err == nil {
-				t.Errorf("Parse(%q) did not fail", c.sql)
+				t.Errorf("Parse(%q) did not fail", c.s)
 			}
 		} else {
 			if err != nil {
-				t.Errorf("Parse(%q) failed with %s", c.sql, err)
-			} else if cs, ok := cs.(*datadef.CreateIndex); !ok ||
+				t.Errorf("Parse(%q) failed with %s", c.s, err)
+			} else if cs, ok := cs.(*sql.CreateIndex); !ok ||
 				!reflect.DeepEqual(&c.stmt, cs) {
-				t.Errorf("Parse(%q) got %s want %s", c.sql, cs.String(), c.stmt.String())
+				t.Errorf("Parse(%q) got %s want %s", c.s, cs.String(), c.stmt.String())
 			}
 		}
 	}
@@ -797,62 +864,62 @@ func TestInsertValues(t *testing.T) {
 		stmt query.InsertValues
 		fail bool
 	}{
-		{sql: "insert into t", fail: true},
-		{sql: "insert t values (1)", fail: true},
-		{sql: "insert into t (1)", fail: true},
-		{sql: "insert into t values (1", fail: true},
-		{sql: "insert into t values 1)", fail: true},
-		{sql: "insert into t values (1, )", fail: true},
-		{sql: "insert into t values (1, 2),", fail: true},
-		{sql: "insert into t values (1, 2) (3)", fail: true},
-		{sql: "insert into t () values (1, 2)", fail: true},
-		{sql: "insert into t (a values (1, 2)", fail: true},
-		{sql: "insert into t (a, ) values (1, 2)", fail: true},
-		{sql: "insert into t (a, a) values (1, 2)", fail: true},
-		{sql: "insert into t (a, b, a) values (1, 2)", fail: true},
+		{s: "insert into t", fail: true},
+		{s: "insert t values (1)", fail: true},
+		{s: "insert into t (1)", fail: true},
+		{s: "insert into t values (1", fail: true},
+		{s: "insert into t values 1)", fail: true},
+		{s: "insert into t values (1, )", fail: true},
+		{s: "insert into t values (1, 2),", fail: true},
+		{s: "insert into t values (1, 2) (3)", fail: true},
+		{s: "insert into t () values (1, 2)", fail: true},
+		{s: "insert into t (a values (1, 2)", fail: true},
+		{s: "insert into t (a, ) values (1, 2)", fail: true},
+		{s: "insert into t (a, a) values (1, 2)", fail: true},
+		{s: "insert into t (a, b, a) values (1, 2)", fail: true},
 		{
-			sql: "insert into t values (1, 'abc', true)",
+			s: "insert into t values (1, 'abc', true)",
 			stmt: query.InsertValues{
-				Table: sql.TableName{Table: sql.ID("t")},
-				Rows: [][]expr.Expr{
-					{expr.Int64Literal(1), expr.StringLiteral("abc"), expr.True()},
+				Table: types.TableName{Table: types.ID("t", false)},
+				Rows: [][]sql.Expr{
+					{int64Literal(1), stringLiteral("abc"), trueLiteral},
 				},
 			},
 		},
 		{
-			sql: "insert into t values (1, 'abc', true), (2, 'def', false)",
+			s: "insert into t values (1, 'abc', true), (2, 'def', false)",
 			stmt: query.InsertValues{
-				Table: sql.TableName{Table: sql.ID("t")},
-				Rows: [][]expr.Expr{
-					{expr.Int64Literal(1), expr.StringLiteral("abc"), expr.True()},
-					{expr.Int64Literal(2), expr.StringLiteral("def"), expr.False()},
+				Table: types.TableName{Table: types.ID("t", false)},
+				Rows: [][]sql.Expr{
+					{int64Literal(1), stringLiteral("abc"), trueLiteral},
+					{int64Literal(2), stringLiteral("def"), falseLiteral},
 				},
 			},
 		},
 		{
-			sql: "insert into t values (NULL, 'abc', NULL)",
+			s: "insert into t values (NULL, 'abc', NULL)",
 			stmt: query.InsertValues{
-				Table: sql.TableName{Table: sql.ID("t")},
-				Rows: [][]expr.Expr{
-					{expr.Nil(), expr.StringLiteral("abc"), expr.Nil()},
+				Table: types.TableName{Table: types.ID("t", false)},
+				Rows: [][]sql.Expr{
+					{sql.Nil(), stringLiteral("abc"), sql.Nil()},
 				},
 			},
 		},
 	}
 
 	for i, c := range cases {
-		p := NewParser(strings.NewReader(c.sql), fmt.Sprintf("tests[%d]", i))
+		p := NewParser(strings.NewReader(c.s), fmt.Sprintf("tests[%d]", i))
 		is, err := p.Parse()
 		if c.fail {
 			if err == nil {
-				t.Errorf("Parse(%q) did not fail", c.sql)
+				t.Errorf("Parse(%q) did not fail", c.s)
 			}
 		} else {
 			if err != nil {
-				t.Errorf("Parse(%q) failed with %s", c.sql, err)
+				t.Errorf("Parse(%q) failed with %s", c.s, err)
 			} else if is, ok := is.(*query.InsertValues); !ok ||
 				!reflect.DeepEqual(&c.stmt, is) {
-				t.Errorf("Parse(%q) got %s want %s", c.sql, is.String(), c.stmt.String())
+				t.Errorf("Parse(%q) got %s want %s", c.s, is.String(), c.stmt.String())
 			}
 		}
 	}
@@ -904,12 +971,12 @@ func TestParseExpr(t *testing.T) {
 	}
 
 	for i, c := range cases {
-		p := NewParser(strings.NewReader(c.sql), fmt.Sprintf("cases[%d]", i))
+		p := NewParser(strings.NewReader(c.s), fmt.Sprintf("cases[%d]", i))
 		e, err := p.ParseExpr()
 		if err != nil {
-			t.Errorf("ParseExpr(%q) failed with %s", c.sql, err)
+			t.Errorf("ParseExpr(%q) failed with %s", c.s, err)
 		} else if c.expr != e.String() {
-			t.Errorf("ParseExpr(%q) got %s want %s", c.sql, e, c.expr)
+			t.Errorf("ParseExpr(%q) got %s want %s", c.s, e, c.expr)
 		}
 	}
 
@@ -947,461 +1014,461 @@ func TestSelect(t *testing.T) {
 		stmt query.Select
 		fail bool
 	}{
-		{sql: "select", fail: true},
-		{sql: "select *, * from t", fail: true},
-		{sql: "select c, * from t", fail: true},
-		{sql: "select c, from t", fail: true},
-		{sql: "select t.c, c, * from t", fail: true},
+		{s: "select", fail: true},
+		{s: "select *, * from t", fail: true},
+		{s: "select c, * from t", fail: true},
+		{s: "select c, from t", fail: true},
+		{s: "select t.c, c, * from t", fail: true},
 		{
-			sql:  "select *",
+			s:  "select *",
 			stmt: query.Select{},
 		},
 		{
-			sql: "select * from t",
+			s: "select * from t",
 			stmt: query.Select{
-				From: &query.FromTableAlias{TableName: sql.TableName{Table: sql.ID("t")}},
+				From: &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t", false)}},
 			},
 		},
 		{
-			sql: "select * from t where x > 1",
+			s: "select * from t where x > 1",
 			stmt: query.Select{
-				From: &query.FromTableAlias{TableName: sql.TableName{Table: sql.ID("t")}},
-				Where: &expr.Binary{Op: expr.GreaterThanOp, Left: expr.Ref{sql.ID("x")},
-					Right: expr.Int64Literal(1)},
+				From: &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t", false)}},
+				Where: &sql.BinaryExpr{Op: sql.GreaterThanOp, Left: sql.Ref{types.ID("x", false)},
+					Right: int64Literal(1)},
 			},
 		},
 		{
-			sql: "select * from t@i",
+			s: "select * from t@i",
 			stmt: query.Select{
 				From: &query.FromIndexAlias{
-					TableName: sql.TableName{Table: sql.ID("t")},
-					Index:     sql.ID("i"),
+					TableName: types.TableName{Table: types.ID("t", false)},
+					Index:     types.ID("i", false),
 				},
 			},
 		},
 		{
-			sql: "select * from t@i where x > 1",
+			s: "select * from t@i where x > 1",
 			stmt: query.Select{
 				From: &query.FromIndexAlias{
-					TableName: sql.TableName{Table: sql.ID("t")},
-					Index:     sql.ID("i"),
+					TableName: types.TableName{Table: types.ID("t", false)},
+					Index:     types.ID("i", false),
 				},
-				Where: &expr.Binary{Op: expr.GreaterThanOp, Left: expr.Ref{sql.ID("x")},
-					Right: expr.Int64Literal(1)},
+				Where: &sql.BinaryExpr{Op: sql.GreaterThanOp, Left: sql.Ref{types.ID("x", false)},
+					Right: int64Literal(1)},
 			},
 		},
 		{
-			sql: "select * from t where x = (show schema)",
+			s: "select * from t where x = (show schema)",
 			stmt: query.Select{
-				From: &query.FromTableAlias{TableName: sql.TableName{Table: sql.ID("t")}},
-				Where: &expr.Binary{
-					Op:   expr.EqualOp,
-					Left: expr.Ref{sql.ID("x")},
-					Right: expr.Subquery{
-						Op: expr.Scalar,
+				From: &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t", false)}},
+				Where: &sql.BinaryExpr{
+					Op:   sql.EqualOp,
+					Left: sql.Ref{types.ID("x", false)},
+					Right: sql.Subquery{
+						Op: sql.Scalar,
 						Stmt: &misc.Show{
-							Variable: sql.SCHEMA,
+							Variable: types.SCHEMA,
 						},
 					},
 				},
 			},
 		},
 		{
-			sql: "select * from (table t) as t",
+			s: "select * from (table t) as t",
 			stmt: query.Select{
 				From: query.FromStmt{
 					Stmt: &query.Select{
 						From: &query.FromTableAlias{
-							TableName: sql.TableName{Table: sql.ID("t")},
+							TableName: types.TableName{Table: types.ID("t", false)},
 						},
 					},
-					Alias: sql.ID("t"),
+					Alias: types.ID("t", false),
 				},
 			},
 		},
 		{
-			sql: "select c from t",
+			s: "select c from t",
 			stmt: query.Select{
-				From: &query.FromTableAlias{TableName: sql.TableName{Table: sql.ID("t")}},
+				From: &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t", false)}},
 				Results: []query.SelectResult{
-					query.ExprResult{Expr: expr.Ref{sql.ID("c")}},
+					query.ExprResult{Expr: sql.Ref{types.ID("c", false)}},
 				},
 			},
 		},
 		{
-			sql: "select c1, c2, t.c3 from t",
+			s: "select c1, c2, t.c3 from t",
 			stmt: query.Select{
-				From: &query.FromTableAlias{TableName: sql.TableName{Table: sql.ID("t")}},
+				From: &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t", false)}},
 				Results: []query.SelectResult{
-					query.ExprResult{Expr: expr.Ref{sql.ID("c1")}},
-					query.ExprResult{Expr: expr.Ref{sql.ID("c2")}},
-					query.ExprResult{Expr: expr.Ref{sql.ID("t"), sql.ID("c3")}},
+					query.ExprResult{Expr: sql.Ref{types.ID("c1", false)}},
+					query.ExprResult{Expr: sql.Ref{types.ID("c2", false)}},
+					query.ExprResult{Expr: sql.Ref{types.ID("t", false), types.ID("c3", false)}},
 				},
 			},
 		},
 		{
-			sql: "select t.*, c1, c2 from t",
+			s: "select t.*, c1, c2 from t",
 			stmt: query.Select{
-				From: &query.FromTableAlias{TableName: sql.TableName{Table: sql.ID("t")}},
+				From: &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t", false)}},
 				Results: []query.SelectResult{
-					query.TableResult{Table: sql.ID("t")},
-					query.ExprResult{Expr: expr.Ref{sql.ID("c1")}},
-					query.ExprResult{Expr: expr.Ref{sql.ID("c2")}},
+					query.TableResult{Table: types.ID("t", false)},
+					query.ExprResult{Expr: sql.Ref{types.ID("c1", false)}},
+					query.ExprResult{Expr: sql.Ref{types.ID("c2", false)}},
 				},
 			},
 		},
 		{
-			sql: "select c1, t.*, c2 from t",
+			s: "select c1, t.*, c2 from t",
 			stmt: query.Select{
-				From: &query.FromTableAlias{TableName: sql.TableName{Table: sql.ID("t")}},
+				From: &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t", false)}},
 				Results: []query.SelectResult{
-					query.ExprResult{Expr: expr.Ref{sql.ID("c1")}},
-					query.TableResult{Table: sql.ID("t")},
-					query.ExprResult{Expr: expr.Ref{sql.ID("c2")}},
+					query.ExprResult{Expr: sql.Ref{types.ID("c1", false)}},
+					query.TableResult{Table: types.ID("t", false)},
+					query.ExprResult{Expr: sql.Ref{types.ID("c2", false)}},
 				},
 			},
 		},
 		{
-			sql: "select c1, c2, t.* from t",
+			s: "select c1, c2, t.* from t",
 			stmt: query.Select{
-				From: &query.FromTableAlias{TableName: sql.TableName{Table: sql.ID("t")}},
+				From: &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t", false)}},
 				Results: []query.SelectResult{
-					query.ExprResult{Expr: expr.Ref{sql.ID("c1")}},
-					query.ExprResult{Expr: expr.Ref{sql.ID("c2")}},
-					query.TableResult{Table: sql.ID("t")},
+					query.ExprResult{Expr: sql.Ref{types.ID("c1", false)}},
+					query.ExprResult{Expr: sql.Ref{types.ID("c2", false)}},
+					query.TableResult{Table: types.ID("t", false)},
 				},
 			},
 		},
 		{
-			sql: "select t2.c1 as a1, c2 as a2 from t",
+			s: "select t2.c1 as a1, c2 as a2 from t",
 			stmt: query.Select{
-				From: &query.FromTableAlias{TableName: sql.TableName{Table: sql.ID("t")}},
-				Results: []query.SelectResult{
-					query.ExprResult{
-						Expr:  expr.Ref{sql.ID("t2"), sql.ID("c1")},
-						Alias: sql.ID("a1"),
-					},
-					query.ExprResult{Expr: expr.Ref{sql.ID("c2")}, Alias: sql.ID("a2")},
-				},
-			},
-		},
-		{
-			sql: "select t2.c1 a1, c2 a2 from t",
-			stmt: query.Select{
-				From: &query.FromTableAlias{TableName: sql.TableName{Table: sql.ID("t")}},
+				From: &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t", false)}},
 				Results: []query.SelectResult{
 					query.ExprResult{
-						Expr:  expr.Ref{sql.ID("t2"), sql.ID("c1")},
-						Alias: sql.ID("a1"),
+						Expr:  sql.Ref{types.ID("t2", false), types.ID("c1", false)},
+						Alias: types.ID("a1", false),
 					},
-					query.ExprResult{Expr: expr.Ref{sql.ID("c2")}, Alias: sql.ID("a2")},
+					query.ExprResult{Expr: sql.Ref{types.ID("c2", false)}, Alias: types.ID("a2", false)},
 				},
 			},
 		},
 		{
-			sql: "select c1 + c2 as a from t",
+			s: "select t2.c1 a1, c2 a2 from t",
 			stmt: query.Select{
-				From: &query.FromTableAlias{TableName: sql.TableName{Table: sql.ID("t")}},
+				From: &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t", false)}},
 				Results: []query.SelectResult{
 					query.ExprResult{
-						Expr: &expr.Binary{Op: expr.AddOp,
-							Left: expr.Ref{sql.ID("c1")}, Right: expr.Ref{sql.ID("c2")}},
-						Alias: sql.ID("a"),
+						Expr:  sql.Ref{types.ID("t2", false), types.ID("c1", false)},
+						Alias: types.ID("a1", false),
+					},
+					query.ExprResult{Expr: sql.Ref{types.ID("c2", false)}, Alias: types.ID("a2", false)},
+				},
+			},
+		},
+		{
+			s: "select c1 + c2 as a from t",
+			stmt: query.Select{
+				From: &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t", false)}},
+				Results: []query.SelectResult{
+					query.ExprResult{
+						Expr: &sql.BinaryExpr{Op: sql.AddOp,
+							Left: sql.Ref{types.ID("c1", false)}, Right: sql.Ref{types.ID("c2", false)}},
+						Alias: types.ID("a", false),
 					},
 				},
 			},
 		},
 		{
-			sql: "select t1.c1, t2.c2 from t1, t2",
+			s: "select t1.c1, t2.c2 from t1, t2",
 			stmt: query.Select{
 				From: query.FromJoin{
-					Left:  &query.FromTableAlias{TableName: sql.TableName{Table: sql.ID("t1")}},
-					Right: &query.FromTableAlias{TableName: sql.TableName{Table: sql.ID("t2")}},
+					Left:  &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t1", false)}},
+					Right: &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t2", false)}},
 					Type:  query.CrossJoin,
 				},
 				Results: []query.SelectResult{
-					query.ExprResult{Expr: expr.Ref{sql.ID("t1"), sql.ID("c1")}},
-					query.ExprResult{Expr: expr.Ref{sql.ID("t2"), sql.ID("c2")}},
+					query.ExprResult{Expr: sql.Ref{types.ID("t1", false), types.ID("c1", false)}},
+					query.ExprResult{Expr: sql.Ref{types.ID("t2", false), types.ID("c2", false)}},
 				},
 			},
 		},
 		{
-			sql: "select * from t1, t2, t3",
+			s: "select * from t1, t2, t3",
 			stmt: query.Select{
 				From: query.FromJoin{
 					Left: query.FromJoin{
-						Left:  &query.FromTableAlias{TableName: sql.TableName{Table: sql.ID("t1")}},
-						Right: &query.FromTableAlias{TableName: sql.TableName{Table: sql.ID("t2")}},
+						Left:  &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t1", false)}},
+						Right: &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t2", false)}},
 						Type:  query.CrossJoin,
 					},
-					Right: &query.FromTableAlias{TableName: sql.TableName{Table: sql.ID("t3")}},
+					Right: &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t3", false)}},
 					Type:  query.CrossJoin,
 				},
 			},
 		},
 		{
-			sql: "select * from t1 join t2 using (c1), t3",
+			s: "select * from t1 join t2 using (c1), t3",
 			stmt: query.Select{
 				From: query.FromJoin{
 					Left: query.FromJoin{
-						Left:  &query.FromTableAlias{TableName: sql.TableName{Table: sql.ID("t1")}},
-						Right: &query.FromTableAlias{TableName: sql.TableName{Table: sql.ID("t2")}},
+						Left:  &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t1", false)}},
+						Right: &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t2", false)}},
 						Type:  query.Join,
-						Using: []sql.Identifier{sql.ID("c1")},
+						Using: []types.Identifier{types.ID("c1", false)},
 					},
-					Right: &query.FromTableAlias{TableName: sql.TableName{Table: sql.ID("t3")}},
+					Right: &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t3", false)}},
 					Type:  query.CrossJoin,
 				},
 			},
 		},
 		{
-			sql: "select * from (t1, t2) right join t3 using (c1)",
+			s: "select * from (t1, t2) right join t3 using (c1)",
 			stmt: query.Select{
 				From: query.FromJoin{
 					Left: query.FromJoin{
-						Left:  &query.FromTableAlias{TableName: sql.TableName{Table: sql.ID("t1")}},
-						Right: &query.FromTableAlias{TableName: sql.TableName{Table: sql.ID("t2")}},
+						Left:  &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t1", false)}},
+						Right: &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t2", false)}},
 						Type:  query.CrossJoin,
 					},
-					Right: &query.FromTableAlias{TableName: sql.TableName{Table: sql.ID("t3")}},
+					Right: &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t3", false)}},
 					Type:  query.RightJoin,
-					Using: []sql.Identifier{sql.ID("c1")},
+					Using: []types.Identifier{types.ID("c1", false)},
 				},
 			},
 		},
 		{
-			sql: "select * from t1 inner join t2 on c1 > 5",
+			s: "select * from t1 inner join t2 on c1 > 5",
 			stmt: query.Select{
 				From: query.FromJoin{
-					Left:  &query.FromTableAlias{TableName: sql.TableName{Table: sql.ID("t1")}},
-					Right: &query.FromTableAlias{TableName: sql.TableName{Table: sql.ID("t2")}},
+					Left:  &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t1", false)}},
+					Right: &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t2", false)}},
 					Type:  query.Join,
-					On: &expr.Binary{Op: expr.GreaterThanOp,
-						Left: expr.Ref{sql.ID("c1")}, Right: expr.Int64Literal(5)},
+					On: &sql.BinaryExpr{Op: sql.GreaterThanOp,
+						Left: sql.Ref{types.ID("c1", false)}, Right: int64Literal(5)},
 				},
 			},
 		},
 		{
-			sql: "select * from t1 inner join t2 using (c1, c2, c3)",
+			s: "select * from t1 inner join t2 using (c1, c2, c3)",
 			stmt: query.Select{
 				From: query.FromJoin{
-					Left:  &query.FromTableAlias{TableName: sql.TableName{Table: sql.ID("t1")}},
-					Right: &query.FromTableAlias{TableName: sql.TableName{Table: sql.ID("t2")}},
+					Left:  &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t1", false)}},
+					Right: &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t2", false)}},
 					Type:  query.Join,
-					Using: []sql.Identifier{sql.ID("c1"), sql.ID("c2"), sql.ID("c3")},
+					Using: []types.Identifier{types.ID("c1", false), types.ID("c2", false), types.ID("c3", false)},
 				},
 			},
 		},
-		{sql: "select * from t1, t2 full outer join t3", fail: true},
-		{sql: "select * from t1 inner join t2", fail: true},
-		{sql: "select * from t1 inner join t2", fail: true},
-		{sql: "select * from t1 inner join t2", fail: true},
-		{sql: "select * from t1 inner join t2 on c1 > 5 using (c1, c2)", fail: true},
-		{sql: "select * from t1 cross join t2 on c1 > 5", fail: true},
-		{sql: "select * from t1 cross join t2 using (c1, c2)", fail: true},
-		{sql: "select * from t1 inner join t2 using ()", fail: true},
-		{sql: "select * from t1 inner join t2 using (c1, c1)", fail: true},
+		{s: "select * from t1, t2 full outer join t3", fail: true},
+		{s: "select * from t1 inner join t2", fail: true},
+		{s: "select * from t1 inner join t2", fail: true},
+		{s: "select * from t1 inner join t2", fail: true},
+		{s: "select * from t1 inner join t2 on c1 > 5 using (c1, c2)", fail: true},
+		{s: "select * from t1 cross join t2 on c1 > 5", fail: true},
+		{s: "select * from t1 cross join t2 using (c1, c2)", fail: true},
+		{s: "select * from t1 inner join t2 using ()", fail: true},
+		{s: "select * from t1 inner join t2 using (c1, c1)", fail: true},
 		{
-			sql: "select * from (select * from t1) as s1 join t2 using (c1)",
+			s: "select * from (select * from t1) as s1 join t2 using (c1)",
 			stmt: query.Select{
 				From: query.FromJoin{
 					Left: query.FromStmt{
 						Stmt: &query.Select{
 							From: &query.FromTableAlias{
-								TableName: sql.TableName{Table: sql.ID("t1")},
+								TableName: types.TableName{Table: types.ID("t1", false)},
 							},
 						},
-						Alias: sql.ID("s1"),
+						Alias: types.ID("s1", false),
 					},
-					Right: &query.FromTableAlias{TableName: sql.TableName{Table: sql.ID("t2")}},
+					Right: &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t2", false)}},
 					Type:  query.Join,
-					Using: []sql.Identifier{sql.ID("c1")},
+					Using: []types.Identifier{types.ID("c1", false)},
 				},
 			},
 		},
 		{
-			sql: "select * from t2 join (values (1, 'abc', true)) as v1 using (c1, c2)",
+			s: "select * from t2 join (values (1, 'abc', true)) as v1 using (c1, c2)",
 			stmt: query.Select{
 				From: query.FromJoin{
-					Left: &query.FromTableAlias{TableName: sql.TableName{Table: sql.ID("t2")}},
+					Left: &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t2", false)}},
 					Right: query.FromStmt{
 						Stmt: &query.Values{
-							Expressions: [][]expr.Expr{
-								{expr.Int64Literal(1), expr.StringLiteral("abc"), expr.True()},
+							Expressions: [][]sql.Expr{
+								{int64Literal(1), stringLiteral("abc"), trueLiteral},
 							},
 						},
-						Alias: sql.ID("v1"),
+						Alias: types.ID("v1", false),
 					},
 					Type:  query.Join,
-					Using: []sql.Identifier{sql.ID("c1"), sql.ID("c2")},
+					Using: []types.Identifier{types.ID("c1", false), types.ID("c2", false)},
 				},
 			},
 		},
 		{
-			sql: "select * from (select * from t1) s1 join (values (1, 'abc', true)) as v1 " +
+			s: "select * from (select * from t1) s1 join (values (1, 'abc', true)) as v1 " +
 				"using (c1, c2)",
 			stmt: query.Select{
 				From: query.FromJoin{
 					Left: query.FromStmt{
 						Stmt: &query.Select{
 							From: &query.FromTableAlias{
-								TableName: sql.TableName{Table: sql.ID("t1")},
+								TableName: types.TableName{Table: types.ID("t1", false)},
 							},
 						},
-						Alias: sql.ID("s1"),
+						Alias: types.ID("s1", false),
 					},
 					Right: query.FromStmt{
 						Stmt: &query.Values{
-							Expressions: [][]expr.Expr{
-								{expr.Int64Literal(1), expr.StringLiteral("abc"), expr.True()},
+							Expressions: [][]sql.Expr{
+								{int64Literal(1), stringLiteral("abc"), trueLiteral},
 							},
 						},
-						Alias: sql.ID("v1"),
+						Alias: types.ID("v1", false),
 					},
 					Type:  query.Join,
-					Using: []sql.Identifier{sql.ID("c1"), sql.ID("c2")},
+					Using: []types.Identifier{types.ID("c1", false), types.ID("c2", false)},
 				},
 			},
 		},
-		{sql: "select * from (values (1, 'abc', true)) as v1 (", fail: true},
-		{sql: "select * from (values (1, 'abc', true)) as v1 )", fail: true},
-		{sql: "select * from (values (1, 'abc', true)) as v1 (,", fail: true},
-		{sql: "select * from (values (1, 'abc', true)) as v1 (a,)", fail: true},
-		{sql: "select * from (values (1, 'abc', true)) as v1 (a b)", fail: true},
+		{s: "select * from (values (1, 'abc', true)) as v1 (", fail: true},
+		{s: "select * from (values (1, 'abc', true)) as v1 )", fail: true},
+		{s: "select * from (values (1, 'abc', true)) as v1 (,", fail: true},
+		{s: "select * from (values (1, 'abc', true)) as v1 (a,)", fail: true},
+		{s: "select * from (values (1, 'abc', true)) as v1 (a b)", fail: true},
 		{
-			sql: "select * from (values (1, 'abc', true)) as v1",
+			s: "select * from (values (1, 'abc', true)) as v1",
 			stmt: query.Select{
 				From: query.FromStmt{
 					Stmt: &query.Values{
-						Expressions: [][]expr.Expr{
-							{expr.Int64Literal(1), expr.StringLiteral("abc"), expr.True()},
+						Expressions: [][]sql.Expr{
+							{int64Literal(1), stringLiteral("abc"), trueLiteral},
 						},
 					},
-					Alias: sql.ID("v1"),
+					Alias: types.ID("v1", false),
 				},
 			},
 		},
 		{
-			sql: "select * from (values (1, 'abc', true)) as v1 (c1, c2, c3)",
+			s: "select * from (values (1, 'abc', true)) as v1 (c1, c2, c3)",
 			stmt: query.Select{
 				From: query.FromStmt{
 					Stmt: &query.Values{
-						Expressions: [][]expr.Expr{
-							{expr.Int64Literal(1), expr.StringLiteral("abc"), expr.True()},
+						Expressions: [][]sql.Expr{
+							{int64Literal(1), stringLiteral("abc"), trueLiteral},
 						},
 					},
-					Alias:         sql.ID("v1"),
-					ColumnAliases: []sql.Identifier{sql.ID("c1"), sql.ID("c2"), sql.ID("c3")},
+					Alias:         types.ID("v1", false),
+					ColumnAliases: []types.Identifier{types.ID("c1", false), types.ID("c2", false), types.ID("c3", false)},
 				},
 			},
 		},
-		{sql: "select * from (select * from t1) as s1 (", fail: true},
-		{sql: "select * from (select * from t1) as s1 )", fail: true},
-		{sql: "select * from (select * from t1) as s1 (,", fail: true},
-		{sql: "select * from (select * from t1) as s1 (a,)", fail: true},
-		{sql: "select * from (select * from t1) as s1 (a b)", fail: true},
+		{s: "select * from (select * from t1) as s1 (", fail: true},
+		{s: "select * from (select * from t1) as s1 )", fail: true},
+		{s: "select * from (select * from t1) as s1 (,", fail: true},
+		{s: "select * from (select * from t1) as s1 (a,)", fail: true},
+		{s: "select * from (select * from t1) as s1 (a b)", fail: true},
 		{
-			sql: "select * from (select * from t1) as s1",
+			s: "select * from (select * from t1) as s1",
 			stmt: query.Select{
 				From: query.FromStmt{
 					Stmt: &query.Select{
-						From: &query.FromTableAlias{TableName: sql.TableName{Table: sql.ID("t1")}},
+						From: &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t1", false)}},
 					},
-					Alias: sql.ID("s1"),
+					Alias: types.ID("s1", false),
 				},
 			},
 		},
 		{
-			sql: "select * from (select * from t1) as s1 (c1)",
+			s: "select * from (select * from t1) as s1 (c1)",
 			stmt: query.Select{
 				From: query.FromStmt{
 					Stmt: &query.Select{
-						From: &query.FromTableAlias{TableName: sql.TableName{Table: sql.ID("t1")}},
+						From: &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t1", false)}},
 					},
-					Alias:         sql.ID("s1"),
-					ColumnAliases: []sql.Identifier{sql.ID("c1")},
+					Alias:         types.ID("s1", false),
+					ColumnAliases: []types.Identifier{types.ID("c1", false)},
 				},
 			},
 		},
 		{
-			sql: "select * from (select * from t1) as s1 (c1, c2)",
+			s: "select * from (select * from t1) as s1 (c1, c2)",
 			stmt: query.Select{
 				From: query.FromStmt{
 					Stmt: &query.Select{
-						From: &query.FromTableAlias{TableName: sql.TableName{Table: sql.ID("t1")}},
+						From: &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t1", false)}},
 					},
-					Alias:         sql.ID("s1"),
-					ColumnAliases: []sql.Identifier{sql.ID("c1"), sql.ID("c2")},
+					Alias:         types.ID("s1", false),
+					ColumnAliases: []types.Identifier{types.ID("c1", false), types.ID("c2", false)},
 				},
 			},
 		},
 		{
-			sql: "select * from (select * from t1) as s1 (c1, c2, c3)",
+			s: "select * from (select * from t1) as s1 (c1, c2, c3)",
 			stmt: query.Select{
 				From: query.FromStmt{
 					Stmt: &query.Select{
-						From: &query.FromTableAlias{TableName: sql.TableName{Table: sql.ID("t1")}},
+						From: &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t1", false)}},
 					},
-					Alias:         sql.ID("s1"),
-					ColumnAliases: []sql.Identifier{sql.ID("c1"), sql.ID("c2"), sql.ID("c3")},
+					Alias:         types.ID("s1", false),
+					ColumnAliases: []types.Identifier{types.ID("c1", false), types.ID("c2", false), types.ID("c3", false)},
 				},
 			},
 		},
-		{sql: "select c where c > 5 from t", fail: true},
-		{sql: "select c from t group", fail: true},
-		{sql: "select c from t group by", fail: true},
-		{sql: "select c from t group by c where c > 5", fail: true},
-		{sql: "select c from t group by c having", fail: true},
-		{sql: "select c from t group by c, d, having c > 5", fail: true},
+		{s: "select c where c > 5 from t", fail: true},
+		{s: "select c from t group", fail: true},
+		{s: "select c from t group by", fail: true},
+		{s: "select c from t group by c where c > 5", fail: true},
+		{s: "select c from t group by c having", fail: true},
+		{s: "select c from t group by c, d, having c > 5", fail: true},
 		{
-			sql: "select c from t group by c",
+			s: "select c from t group by c",
 			stmt: query.Select{
-				From: &query.FromTableAlias{TableName: sql.TableName{Table: sql.ID("t")}},
+				From: &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t", false)}},
 				Results: []query.SelectResult{
-					query.ExprResult{Expr: expr.Ref{sql.ID("c")}},
+					query.ExprResult{Expr: sql.Ref{types.ID("c", false)}},
 				},
-				GroupBy: []expr.Expr{expr.Ref{sql.ID("c")}},
+				GroupBy: []sql.Expr{sql.Ref{types.ID("c", false)}},
 			},
 		},
 		{
-			sql: "select c from t group by c, d, e + f",
+			s: "select c from t group by c, d, e + f",
 			stmt: query.Select{
-				From: &query.FromTableAlias{TableName: sql.TableName{Table: sql.ID("t")}},
+				From: &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t", false)}},
 				Results: []query.SelectResult{
-					query.ExprResult{Expr: expr.Ref{sql.ID("c")}},
+					query.ExprResult{Expr: sql.Ref{types.ID("c", false)}},
 				},
-				GroupBy: []expr.Expr{expr.Ref{sql.ID("c")}, expr.Ref{sql.ID("d")},
-					&expr.Binary{Op: expr.AddOp, Left: expr.Ref{sql.ID("e")},
-						Right: expr.Ref{sql.ID("f")}},
+				GroupBy: []sql.Expr{sql.Ref{types.ID("c", false)}, sql.Ref{types.ID("d", false)},
+					&sql.BinaryExpr{Op: sql.AddOp, Left: sql.Ref{types.ID("e", false)},
+						Right: sql.Ref{types.ID("f", false)}},
 				},
 			},
 		},
 		{
-			sql: "select c from t group by c having c > 1",
+			s: "select c from t group by c having c > 1",
 			stmt: query.Select{
-				From: &query.FromTableAlias{TableName: sql.TableName{Table: sql.ID("t")}},
+				From: &query.FromTableAlias{TableName: types.TableName{Table: types.ID("t", false)}},
 				Results: []query.SelectResult{
-					query.ExprResult{Expr: expr.Ref{sql.ID("c")}},
+					query.ExprResult{Expr: sql.Ref{types.ID("c", false)}},
 				},
-				GroupBy: []expr.Expr{expr.Ref{sql.ID("c")}},
-				Having: &expr.Binary{Op: expr.GreaterThanOp, Left: expr.Ref{sql.ID("c")},
-					Right: expr.Int64Literal(1)},
+				GroupBy: []sql.Expr{sql.Ref{types.ID("c", false)}},
+				Having: &sql.BinaryExpr{Op: sql.GreaterThanOp, Left: sql.Ref{types.ID("c", false)},
+					Right: int64Literal(1)},
 			},
 		},
 	}
 
 	for i, c := range cases {
-		p := NewParser(strings.NewReader(c.sql), fmt.Sprintf("tests[%d]", i))
+		p := NewParser(strings.NewReader(c.s), fmt.Sprintf("tests[%d]", i))
 		ss, err := p.Parse()
 		if c.fail {
 			if err == nil {
-				t.Errorf("Parse(%q) did not fail", c.sql)
+				t.Errorf("Parse(%q) did not fail", c.s)
 			}
 		} else {
 			if err != nil {
-				t.Errorf("Parse(%q) failed with %s", c.sql, err)
+				t.Errorf("Parse(%q) failed with %s", c.s, err)
 			} else if ss, ok := ss.(*query.Select); !ok || !reflect.DeepEqual(&c.stmt, ss) {
-				t.Errorf("Parse(%q) got %s want %s", c.sql, ss.String(), c.stmt.String())
+				t.Errorf("Parse(%q) got %s want %s", c.s, ss.String(), c.stmt.String())
 			}
 		}
 	}
@@ -1413,45 +1480,45 @@ func TestValues(t *testing.T) {
 		stmt query.Values
 		fail bool
 	}{
-		{sql: "values", fail: true},
-		{sql: "values (", fail: true},
-		{sql: "values ()", fail: true},
-		{sql: "values (1", fail: true},
-		{sql: "values (1, 2", fail: true},
-		{sql: "values (1 2)", fail: true},
-		{sql: "values (1, 2), (3)", fail: true},
-		{sql: "values (1, 2, 3), (4, 5), (6, 7, 8)", fail: true},
+		{s: "values", fail: true},
+		{s: "values (", fail: true},
+		{s: "values ()", fail: true},
+		{s: "values (1", fail: true},
+		{s: "values (1, 2", fail: true},
+		{s: "values (1 2)", fail: true},
+		{s: "values (1, 2), (3)", fail: true},
+		{s: "values (1, 2, 3), (4, 5), (6, 7, 8)", fail: true},
 		{
-			sql: "values (1, 'abc', true)",
+			s: "values (1, 'abc', true)",
 			stmt: query.Values{
-				Expressions: [][]expr.Expr{
-					{expr.Int64Literal(1), expr.StringLiteral("abc"), expr.True()},
+				Expressions: [][]sql.Expr{
+					{int64Literal(1), stringLiteral("abc"), trueLiteral},
 				},
 			},
 		},
 		{
-			sql: "values (1, 'abc', true), (2, 'def', false)",
+			s: "values (1, 'abc', true), (2, 'def', false)",
 			stmt: query.Values{
-				Expressions: [][]expr.Expr{
-					{expr.Int64Literal(1), expr.StringLiteral("abc"), expr.True()},
-					{expr.Int64Literal(2), expr.StringLiteral("def"), expr.False()},
+				Expressions: [][]sql.Expr{
+					{int64Literal(1), stringLiteral("abc"), trueLiteral},
+					{int64Literal(2), stringLiteral("def"), falseLiteral},
 				},
 			},
 		},
 	}
 
 	for i, c := range cases {
-		p := NewParser(strings.NewReader(c.sql), fmt.Sprintf("tests[%d]", i))
+		p := NewParser(strings.NewReader(c.s), fmt.Sprintf("tests[%d]", i))
 		vs, err := p.Parse()
 		if c.fail {
 			if err == nil {
-				t.Errorf("Parse(%q) did not fail", c.sql)
+				t.Errorf("Parse(%q) did not fail", c.s)
 			}
 		} else {
 			if err != nil {
-				t.Errorf("Parse(%q) failed with %s", c.sql, err)
+				t.Errorf("Parse(%q) failed with %s", c.s, err)
 			} else if vs, ok := vs.(*query.Values); !ok || !reflect.DeepEqual(&c.stmt, vs) {
-				t.Errorf("Parse(%q) got %s want %s", c.sql, vs.String(), c.stmt.String())
+				t.Errorf("Parse(%q) got %s want %s", c.s, vs.String(), c.stmt.String())
 			}
 		}
 	}
@@ -1463,39 +1530,39 @@ func TestDelete(t *testing.T) {
 		stmt query.Delete
 		fail bool
 	}{
-		{sql: "delete", fail: true},
-		{sql: "delete t", fail: true},
-		{sql: "delete from", fail: true},
-		{sql: "delete from t1, t2", fail: true},
-		{sql: "delete from t where", fail: true},
+		{s: "delete", fail: true},
+		{s: "delete t", fail: true},
+		{s: "delete from", fail: true},
+		{s: "delete from t1, t2", fail: true},
+		{s: "delete from t where", fail: true},
 		{
-			sql: "delete from t",
+			s: "delete from t",
 			stmt: query.Delete{
-				Table: sql.TableName{Table: sql.ID("t")},
+				Table: types.TableName{Table: types.ID("t", false)},
 			},
 		},
 		{
-			sql: "delete from t where c > 1",
+			s: "delete from t where c > 1",
 			stmt: query.Delete{
-				Table: sql.TableName{Table: sql.ID("t")},
-				Where: &expr.Binary{Op: expr.GreaterThanOp, Left: expr.Ref{sql.ID("c")},
-					Right: expr.Int64Literal(1)},
+				Table: types.TableName{Table: types.ID("t", false)},
+				Where: &sql.BinaryExpr{Op: sql.GreaterThanOp, Left: sql.Ref{types.ID("c", false)},
+					Right: int64Literal(1)},
 			},
 		},
 	}
 
 	for i, c := range cases {
-		p := NewParser(strings.NewReader(c.sql), fmt.Sprintf("tests[%d]", i))
+		p := NewParser(strings.NewReader(c.s), fmt.Sprintf("tests[%d]", i))
 		ds, err := p.Parse()
 		if c.fail {
 			if err == nil {
-				t.Errorf("Parse(%q) did not fail", c.sql)
+				t.Errorf("Parse(%q) did not fail", c.s)
 			}
 		} else {
 			if err != nil {
-				t.Errorf("Parse(%q) failed with %s", c.sql, err)
+				t.Errorf("Parse(%q) failed with %s", c.s, err)
 			} else if ds, ok := ds.(*query.Delete); !ok || !reflect.DeepEqual(&c.stmt, ds) {
-				t.Errorf("Parse(%q) got %s want %s", c.sql, ds.String(), c.stmt.String())
+				t.Errorf("Parse(%q) got %s want %s", c.s, ds.String(), c.stmt.String())
 			}
 		}
 	}
@@ -1507,71 +1574,71 @@ func TestUpdate(t *testing.T) {
 		stmt query.Update
 		fail bool
 	}{
-		{sql: "update", fail: true},
-		{sql: "update t", fail: true},
-		{sql: "update t set", fail: true},
-		{sql: "update set t c = 5", fail: true},
-		{sql: "update t c = 5", fail: true},
-		{sql: "update t set c = 5,", fail: true},
-		{sql: "update t set c = 5, where", fail: true},
-		{sql: "update t set c = 5 where", fail: true},
-		{sql: "update t set where c = 6", fail: true},
+		{s: "update", fail: true},
+		{s: "update t", fail: true},
+		{s: "update t set", fail: true},
+		{s: "update set t c = 5", fail: true},
+		{s: "update t c = 5", fail: true},
+		{s: "update t set c = 5,", fail: true},
+		{s: "update t set c = 5, where", fail: true},
+		{s: "update t set c = 5 where", fail: true},
+		{s: "update t set where c = 6", fail: true},
 		{
-			sql: "update t set c = 5",
+			s: "update t set c = 5",
 			stmt: query.Update{
-				Table: sql.TableName{Table: sql.ID("t")},
+				Table: types.TableName{Table: types.ID("t", false)},
 				ColumnUpdates: []query.ColumnUpdate{
-					{Column: sql.ID("c"), Expr: expr.Int64Literal(5)},
+					{Column: types.ID("c", false), Expr: int64Literal(5)},
 				},
 			},
 		},
 		{
-			sql: "update t set c = 0 where c > 1",
+			s: "update t set c = 0 where c > 1",
 			stmt: query.Update{
-				Table: sql.TableName{Table: sql.ID("t")},
+				Table: types.TableName{Table: types.ID("t", false)},
 				ColumnUpdates: []query.ColumnUpdate{
-					{Column: sql.ID("c"), Expr: expr.Int64Literal(0)},
+					{Column: types.ID("c", false), Expr: int64Literal(0)},
 				},
-				Where: &expr.Binary{Op: expr.GreaterThanOp, Left: expr.Ref{sql.ID("c")},
-					Right: expr.Int64Literal(1)},
+				Where: &sql.BinaryExpr{Op: sql.GreaterThanOp, Left: sql.Ref{types.ID("c", false)},
+					Right: int64Literal(1)},
 			},
 		},
 		{
-			sql: "update t set c = default where c > 1",
+			s: "update t set c = default where c > 1",
 			stmt: query.Update{
-				Table: sql.TableName{Table: sql.ID("t")},
+				Table: types.TableName{Table: types.ID("t", false)},
 				ColumnUpdates: []query.ColumnUpdate{
-					{Column: sql.ID("c"), Expr: nil},
+					{Column: types.ID("c", false), Expr: nil},
 				},
-				Where: &expr.Binary{Op: expr.GreaterThanOp, Left: expr.Ref{sql.ID("c")},
-					Right: expr.Int64Literal(1)},
+				Where: &sql.BinaryExpr{Op: sql.GreaterThanOp, Left: sql.Ref{types.ID("c", false)},
+					Right: int64Literal(1)},
 			},
 		},
 		{
-			sql: "update t set c1 = 1, c2 = 2, c3 = 3",
+			s: "update t set c1 = 1, c2 = 2, c3 = 3",
 			stmt: query.Update{
-				Table: sql.TableName{Table: sql.ID("t")},
+				Table: types.TableName{Table: types.ID("t", false)},
 				ColumnUpdates: []query.ColumnUpdate{
-					{Column: sql.ID("c1"), Expr: expr.Int64Literal(1)},
-					{Column: sql.ID("c2"), Expr: expr.Int64Literal(2)},
-					{Column: sql.ID("c3"), Expr: expr.Int64Literal(3)},
+					{Column: types.ID("c1", false), Expr: int64Literal(1)},
+					{Column: types.ID("c2", false), Expr: int64Literal(2)},
+					{Column: types.ID("c3", false), Expr: int64Literal(3)},
 				},
 			},
 		},
 	}
 
 	for i, c := range cases {
-		p := NewParser(strings.NewReader(c.sql), fmt.Sprintf("tests[%d]", i))
+		p := NewParser(strings.NewReader(c.s), fmt.Sprintf("tests[%d]", i))
 		us, err := p.Parse()
 		if c.fail {
 			if err == nil {
-				t.Errorf("Parse(%q) did not fail", c.sql)
+				t.Errorf("Parse(%q) did not fail", c.s)
 			}
 		} else {
 			if err != nil {
-				t.Errorf("Parse(%q) failed with %s", c.sql, err)
+				t.Errorf("Parse(%q) failed with %s", c.s, err)
 			} else if us, ok := us.(*query.Update); !ok || !reflect.DeepEqual(&c.stmt, us) {
-				t.Errorf("Parse(%q) got %s want %s", c.sql, us.String(), c.stmt.String())
+				t.Errorf("Parse(%q) got %s want %s", c.s, us.String(), c.stmt.String())
 			}
 		}
 	}
@@ -1583,44 +1650,44 @@ func TestCreateDatabase(t *testing.T) {
 		stmt evaluate.Stmt
 		fail bool
 	}{
-		{sql: "create database", fail: true},
+		{s: "create database", fail: true},
 		{
-			sql: "create database test",
-			stmt: &datadef.CreateDatabase{
-				Database: sql.ID("test"),
+			s: "create database test",
+			stmt: &sql.CreateDatabase{
+				Database: types.ID("test", false),
 			},
 		},
-		{sql: "create database test with", fail: true},
-		{sql: "create database test with path", fail: true},
-		{sql: "create database test with path = ", fail: true},
-		{sql: "create database test with 'path' = value", fail: true},
-		{sql: "create database test with create = value", fail: true},
-		{sql: "create database test with path = 'string' engine", fail: true},
+		{s: "create database test with", fail: true},
+		{s: "create database test with path", fail: true},
+		{s: "create database test with path = ", fail: true},
+		{s: "create database test with 'path' = value", fail: true},
+		{s: "create database test with create = value", fail: true},
+		{s: "create database test with path = 'string' engine", fail: true},
 		{
-			sql: "create database test with path = 'string' engine 'fast'",
-			stmt: &datadef.CreateDatabase{
-				Database: sql.ID("test"),
-				Options: map[sql.Identifier]string{
-					sql.UnquotedID("path"):   "string",
-					sql.UnquotedID("engine"): "fast",
+			s: "create database test with path = 'string' engine 'fast'",
+			stmt: &sql.CreateDatabase{
+				Database: types.ID("test", false),
+				Options: map[types.Identifier]string{
+					types.UnquotedID("path"):   "string",
+					types.UnquotedID("engine"): "fast",
 				},
 			},
 		},
 	}
 
 	for i, c := range cases {
-		p := NewParser(strings.NewReader(c.sql), fmt.Sprintf("tests[%d]", i))
+		p := NewParser(strings.NewReader(c.s), fmt.Sprintf("tests[%d]", i))
 		cd, err := p.Parse()
 		if c.fail {
 			if err == nil {
-				t.Errorf("Parse(%q) did not fail", c.sql)
+				t.Errorf("Parse(%q) did not fail", c.s)
 			}
 		} else {
 			if err != nil {
-				t.Errorf("Parse(%q) failed with %s", c.sql, err)
+				t.Errorf("Parse(%q) failed with %s", c.s, err)
 			} else {
 				if !reflect.DeepEqual(c.stmt, cd) {
-					t.Errorf("Parse(%q) got %s want %s", c.sql, cd.String(), c.stmt.String())
+					t.Errorf("Parse(%q) got %s want %s", c.s, cd.String(), c.stmt.String())
 				}
 			}
 		}
@@ -1633,143 +1700,143 @@ func TestAlterTable(t *testing.T) {
 		stmt evaluate.Stmt
 		fail bool
 	}{
-		{sql: "alter table tbl", fail: true},
-		{sql: "alter table exists tbl", fail: true},
+		{s: "alter table tbl", fail: true},
+		{s: "alter table exists tbl", fail: true},
 		{
-			sql: "alter table tbl add foreign key (c1, c2) references rtbl",
-			stmt: &datadef.AlterTable{
-				Table: sql.TableName{Table: sql.ID("tbl")},
-				Actions: []datadef.AlterAction{
-					&datadef.AddForeignKey{
-						datadef.ForeignKey{
-							FKCols:   []sql.Identifier{sql.ID("c1"), sql.ID("c2")},
-							RefTable: sql.TableName{Table: sql.ID("rtbl")},
+			s: "alter table tbl add foreign key (c1, c2) references rtbl",
+			stmt: &sql.AlterTable{
+				Table: types.TableName{Table: types.ID("tbl", false)},
+				Actions: []sql.AlterAction{
+					&sql.AddForeignKey{
+						sql.ForeignKey{
+							FKCols:   []types.Identifier{types.ID("c1", false), types.ID("c2", false)},
+							RefTable: types.TableName{Table: types.ID("rtbl", false)},
 						},
 					},
 				},
 			},
 		},
 		{
-			sql: "alter table tbl add constraint con foreign key (c1) references rtbl",
-			stmt: &datadef.AlterTable{
-				Table: sql.TableName{Table: sql.ID("tbl")},
-				Actions: []datadef.AlterAction{
-					&datadef.AddForeignKey{
-						datadef.ForeignKey{
-							Name:     sql.ID("con"),
-							FKCols:   []sql.Identifier{sql.ID("c1")},
-							RefTable: sql.TableName{Table: sql.ID("rtbl")},
+			s: "alter table tbl add constraint con foreign key (c1) references rtbl",
+			stmt: &sql.AlterTable{
+				Table: types.TableName{Table: types.ID("tbl", false)},
+				Actions: []sql.AlterAction{
+					&sql.AddForeignKey{
+						sql.ForeignKey{
+							Name:     types.ID("con", false),
+							FKCols:   []types.Identifier{types.ID("c1", false)},
+							RefTable: types.TableName{Table: types.ID("rtbl", false)},
 						},
 					},
 				},
 			},
 		},
 		{
-			sql: `alter table tbl add constraint con1 foreign key (c1) references rtbl,
+			s: `alter table tbl add constraint con1 foreign key (c1) references rtbl,
 add constraint con2 foreign key (c2) references tbl2`,
-			stmt: &datadef.AlterTable{
-				Table: sql.TableName{Table: sql.ID("tbl")},
-				Actions: []datadef.AlterAction{
-					&datadef.AddForeignKey{
-						datadef.ForeignKey{
-							Name:     sql.ID("con1"),
-							FKCols:   []sql.Identifier{sql.ID("c1")},
-							RefTable: sql.TableName{Table: sql.ID("rtbl")},
+			stmt: &sql.AlterTable{
+				Table: types.TableName{Table: types.ID("tbl", false)},
+				Actions: []sql.AlterAction{
+					&sql.AddForeignKey{
+						sql.ForeignKey{
+							Name:     types.ID("con1", false),
+							FKCols:   []types.Identifier{types.ID("c1", false)},
+							RefTable: types.TableName{Table: types.ID("rtbl", false)},
 						},
 					},
-					&datadef.AddForeignKey{
-						datadef.ForeignKey{
-							Name:     sql.ID("con2"),
-							FKCols:   []sql.Identifier{sql.ID("c2")},
-							RefTable: sql.TableName{Table: sql.ID("tbl2")},
+					&sql.AddForeignKey{
+						sql.ForeignKey{
+							Name:     types.ID("con2", false),
+							FKCols:   []types.Identifier{types.ID("c2", false)},
+							RefTable: types.TableName{Table: types.ID("tbl2", false)},
 						},
 					},
 				},
 			},
 		},
 		{
-			sql: `alter table tbl add constraint con1 foreign key (c1) references rtbl,
+			s: `alter table tbl add constraint con1 foreign key (c1) references rtbl,
 add constraint con2 foreign key (c2) references tbl2, fail`,
 			fail: true,
 		},
 		{
-			sql: "alter table tbl drop constraint if exists con",
-			stmt: &datadef.AlterTable{
-				Table: sql.TableName{Table: sql.ID("tbl")},
-				Actions: []datadef.AlterAction{
-					&datadef.DropConstraint{
-						Name:     sql.ID("con"),
+			s: "alter table tbl drop constraint if exists con",
+			stmt: &sql.AlterTable{
+				Table: types.TableName{Table: types.ID("tbl", false)},
+				Actions: []sql.AlterAction{
+					&sql.DropConstraint{
+						Name:     types.ID("con", false),
 						IfExists: true,
 					},
 				},
 			},
 		},
 		{
-			sql: `alter table tbl add constraint con foreign key (c1) references rtbl,
+			s: `alter table tbl add constraint con foreign key (c1) references rtbl,
 alter column c1 drop default, alter c2 drop not null, drop constraint con`,
-			stmt: &datadef.AlterTable{
-				Table: sql.TableName{Table: sql.ID("tbl")},
-				Actions: []datadef.AlterAction{
-					&datadef.AddForeignKey{
-						datadef.ForeignKey{
-							Name:     sql.ID("con"),
-							FKCols:   []sql.Identifier{sql.ID("c1")},
-							RefTable: sql.TableName{Table: sql.ID("rtbl")},
+			stmt: &sql.AlterTable{
+				Table: types.TableName{Table: types.ID("tbl", false)},
+				Actions: []sql.AlterAction{
+					&sql.AddForeignKey{
+						sql.ForeignKey{
+							Name:     types.ID("con", false),
+							FKCols:   []types.Identifier{types.ID("c1", false)},
+							RefTable: types.TableName{Table: types.ID("rtbl", false)},
 						},
 					},
-					&datadef.DropConstraint{
-						Column: sql.ID("c1"),
-						Type:   sql.DefaultConstraint,
+					&sql.DropConstraint{
+						Column: types.ID("c1", false),
+						Type:   types.DefaultConstraint,
 					},
-					&datadef.DropConstraint{
-						Column: sql.ID("c2"),
-						Type:   sql.NotNullConstraint,
+					&sql.DropConstraint{
+						Column: types.ID("c2", false),
+						Type:   types.NotNullConstraint,
 					},
-					&datadef.DropConstraint{
-						Name: sql.ID("con"),
+					&sql.DropConstraint{
+						Name: types.ID("con", false),
 					},
 				},
 			},
 		},
 		{
-			sql:  "alter table tbl drop con",
+			s:  "alter table tbl drop con",
 			fail: true,
 		},
 		{
-			sql:  "alter table tbl constraint if exists con",
+			s:  "alter table tbl constraint if exists con",
 			fail: true,
 		},
 		{
-			sql:  "alter table tbl drop constraint if con",
+			s:  "alter table tbl drop constraint if con",
 			fail: true,
 		},
 		{
-			sql:  "alter table tbl alter column drop default",
+			s:  "alter table tbl alter column drop default",
 			fail: true,
 		},
 		{
-			sql:  "alter table tbl alter c1 default",
+			s:  "alter table tbl alter c1 default",
 			fail: true,
 		},
 		{
-			sql:  "alter table tbl alter c1 drop null",
+			s:  "alter table tbl alter c1 drop null",
 			fail: true,
 		},
 	}
 
 	for i, c := range cases {
-		p := NewParser(strings.NewReader(c.sql), fmt.Sprintf("tests[%d]", i))
+		p := NewParser(strings.NewReader(c.s), fmt.Sprintf("tests[%d]", i))
 		cd, err := p.Parse()
 		if c.fail {
 			if err == nil {
-				t.Errorf("Parse(%q) did not fail", c.sql)
+				t.Errorf("Parse(%q) did not fail", c.s)
 			}
 		} else {
 			if err != nil {
-				t.Errorf("Parse(%q) failed with %s", c.sql, err)
+				t.Errorf("Parse(%q) failed with %s", c.s, err)
 			} else {
 				if !reflect.DeepEqual(c.stmt, cd) {
-					t.Errorf("Parse(%q) got %s want %s", c.sql, cd.String(), c.stmt.String())
+					t.Errorf("Parse(%q) got %s want %s", c.s, cd.String(), c.stmt.String())
 				}
 			}
 		}

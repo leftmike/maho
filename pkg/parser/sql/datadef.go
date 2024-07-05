@@ -1,9 +1,8 @@
-package stmt
+package sql
 
 import (
 	"fmt"
 
-	"github.com/leftmike/maho/pkg/parser/expr"
 	"github.com/leftmike/maho/pkg/types"
 )
 
@@ -72,9 +71,9 @@ func (ct ConstraintType) String() string {
 type Constraint struct {
 	Type   ConstraintType
 	Name   types.Identifier
-	ColNum int       // Default, NotNull, and Column Check constraints
-	Key    IndexKey  // Primary and Unique constraints
-	Check  expr.Expr // Check constraints
+	ColNum int      // Default, NotNull, and Column Check constraints
+	Key    IndexKey // Primary and Unique constraints
+	Check  Expr     // Check constraints
 }
 
 func (c Constraint) String() string {
@@ -145,7 +144,7 @@ type CreateTable struct {
 	Table          types.TableName
 	Columns        []types.Identifier
 	ColumnTypes    []types.ColumnType
-	ColumnDefaults []expr.Expr
+	ColumnDefaults []Expr
 	IfNotExists    bool
 	Constraints    []Constraint
 	ForeignKeys    []*ForeignKey
