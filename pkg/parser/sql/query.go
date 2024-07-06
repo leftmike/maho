@@ -3,6 +3,7 @@ package sql
 import (
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/leftmike/maho/pkg/types"
 )
@@ -17,11 +18,10 @@ type FromTableAlias struct {
 }
 
 func (fta FromTableAlias) String() string {
-	s := fta.TableName.String()
 	if fta.Alias != 0 {
-		s += fmt.Sprintf(" AS %s", fta.Alias)
+		return fmt.Sprintf("%s AS %s", fta.TableName, fta.Alias)
 	}
-	return s
+	return fta.TableName.String()
 }
 
 type FromIndexAlias struct {
@@ -31,11 +31,10 @@ type FromIndexAlias struct {
 }
 
 func (fia FromIndexAlias) String() string {
-	s := fmt.Sprintf("%s@%s", fia.TableName, fia.Index)
 	if fia.Alias != 0 {
-		s += fmt.Sprintf(" AS %s", fia.Alias)
+		return fmt.Sprintf("%s@%s AS %s", fia.TableName, fia.Index, fia.Alias)
 	}
-	return s
+	return fmt.Sprintf("%s@%s", fia.TableName, fia.Index)
 }
 
 type FromStmt struct {
@@ -45,18 +44,19 @@ type FromStmt struct {
 }
 
 func (fs FromStmt) String() string {
-	s := fmt.Sprintf("(%s) AS %s", fs.Stmt, fs.Alias)
+	var buf strings.Builder
+	fmt.Fprintf(&buf, "(%s) AS %s", fs.Stmt, fs.Alias)
 	if fs.ColumnAliases != nil {
-		s += " ("
+		buf.WriteString(" (")
 		for i, col := range fs.ColumnAliases {
 			if i > 0 {
-				s += ", "
+				buf.WriteString(", ")
 			}
-			s += col.String()
+			buf.WriteString(col.String())
 		}
-		s += ")"
+		buf.WriteRune(')')
 	}
-	return s
+	return buf.String()
 }
 
 type Copy struct {
@@ -68,21 +68,20 @@ type Copy struct {
 }
 
 func (stmt *Copy) String() string {
-	s := fmt.Sprintf("COPY %s (", stmt.Table)
+	var buf strings.Builder
+	fmt.Fprintf(&buf, "COPY %s (", stmt.Table)
 	for i, col := range stmt.Columns {
 		if i > 0 {
-			s += ", "
+			buf.WriteString(", ")
 		}
-		s += col.String()
+		buf.WriteString(col.String())
 	}
-	s += ") "
-
-	s += "FROM STDIN"
+	buf.WriteString(") FROM STDIN")
 
 	if stmt.Delimiter != '\t' {
-		s += fmt.Sprintf(" DELIMITER '%c'", stmt.Delimiter)
+		fmt.Fprintf(&buf, " DELIMITER '%c'", stmt.Delimiter)
 	}
-	return s
+	return buf.String()
 }
 
 type Delete struct {
@@ -91,11 +90,10 @@ type Delete struct {
 }
 
 func (stmt *Delete) String() string {
-	s := fmt.Sprintf("DELETE FROM %s", stmt.Table)
 	if stmt.Where != nil {
-		s += fmt.Sprintf(" WHERE %s", stmt.Where)
+		return fmt.Sprintf("DELETE FROM %s WHERE %s", stmt.Table, stmt.Where)
 	}
-	return s
+	return fmt.Sprintf("DELETE FROM %s", stmt.Table)
 }
 
 type InsertValues struct {
@@ -105,42 +103,40 @@ type InsertValues struct {
 }
 
 func (stmt *InsertValues) String() string {
-	s := fmt.Sprintf("INSERT INTO %s ", stmt.Table)
+	var buf strings.Builder
+	fmt.Fprintf(&buf, "INSERT INTO %s ", stmt.Table)
+
 	if stmt.Columns != nil {
-		s += "("
+		buf.WriteRune('(')
 		for i, col := range stmt.Columns {
 			if i > 0 {
-				s += ", "
+				buf.WriteString(", ")
 			}
-			s += col.String()
+			buf.WriteString(col.String())
 		}
-		s += ") "
+		buf.WriteString(") ")
 	}
 
-	s += "VALUES"
+	buf.WriteString("VALUES")
 
 	for i, r := range stmt.Rows {
 		if i > 0 {
-			s += ", ("
+			buf.WriteString(", (")
 		} else {
-			s += " ("
+			buf.WriteString(" (")
 		}
 
 		for j, v := range r {
 			if j > 0 {
-				s += ", "
+				buf.WriteString(", ")
 			}
-			if v == nil {
-				s += "NULL"
-			} else {
-				s += v.String()
-			}
+			buf.WriteString(v.String())
 		}
 
-		s += ")"
+		buf.WriteRune(')')
 	}
 
-	return s
+	return buf.String()
 }
 
 type ColumnUpdate struct {
@@ -155,17 +151,18 @@ type Update struct {
 }
 
 func (stmt *Update) String() string {
-	s := fmt.Sprintf("UPDATE %s SET ", stmt.Table)
+	var buf strings.Builder
+	fmt.Fprintf(&buf, "UPDATE %s SET ", stmt.Table)
 	for i, cu := range stmt.ColumnUpdates {
 		if i > 0 {
-			s += ", "
+			buf.WriteString(", ")
 		}
-		s += fmt.Sprintf("%s = %s", cu.Column, cu.Expr)
+		fmt.Fprintf(&buf, "%s = %s", cu.Column, cu.Expr)
 	}
 	if stmt.Where != nil {
-		s += fmt.Sprintf(" WHERE %s", stmt.Where)
+		fmt.Fprintf(&buf, " WHERE %s", stmt.Where)
 	}
-	return s
+	return buf.String()
 }
 
 type Values struct {
@@ -173,25 +170,25 @@ type Values struct {
 }
 
 func (stmt *Values) String() string {
-	s := "VALUES"
+	var buf strings.Builder
+	buf.WriteString("VALUES")
 	for i, r := range stmt.Expressions {
 		if i > 0 {
-			s += ", ("
+			buf.WriteString(", (")
 		} else {
-			s += " ("
+			buf.WriteString(" (")
 		}
 
 		for j, v := range r {
 			if j > 0 {
-				s += ", "
+				buf.WriteString(", ")
 			}
-			s += v.String()
+			buf.WriteString(v.String())
 		}
 
-		s += ")"
+		buf.WriteRune(')')
 	}
-
-	return s
+	return buf.String()
 }
 
 type SelectResult interface {
@@ -226,56 +223,56 @@ func (tr TableResult) String() string {
 }
 
 func (er ExprResult) String() string {
-	s := er.Expr.String()
 	if er.Alias != 0 {
-		s += fmt.Sprintf(" AS %s", er.Alias)
+		return fmt.Sprintf("%s AS %s", er.Expr, er.Alias)
 	}
-	return s
+	return er.Expr.String()
 }
 
 func (stmt *Select) String() string {
-	s := "SELECT "
+	var buf strings.Builder
+	buf.WriteString("SELECT ")
 	if stmt.Results == nil {
-		s += "*"
+		buf.WriteRune('*')
 	} else {
 		for i, sr := range stmt.Results {
 			if i > 0 {
-				s += ", "
+				buf.WriteString(", ")
 			}
-			s += sr.String()
+			buf.WriteString(sr.String())
 		}
 	}
-	s += fmt.Sprintf(" FROM %s", stmt.From)
+	fmt.Fprintf(&buf, " FROM %s", stmt.From)
 	if stmt.Where != nil {
-		s += fmt.Sprintf(" WHERE %s", stmt.Where)
+		fmt.Fprintf(&buf, " WHERE %s", stmt.Where)
 	}
 	if stmt.GroupBy != nil {
-		s += " GROUP BY "
+		buf.WriteString(" GROUP BY ")
 		for i, e := range stmt.GroupBy {
 			if i > 0 {
-				s += ", "
+				buf.WriteString(", ")
 			}
-			s += e.String()
+			buf.WriteString(e.String())
 		}
 		if stmt.Having != nil {
-			s += fmt.Sprintf(" HAVING %s", stmt.Having)
+			buf.WriteString(fmt.Sprintf(" HAVING %s", stmt.Having))
 		}
 	}
 	if stmt.OrderBy != nil {
-		s += " ORDER BY "
+		buf.WriteString(" ORDER BY ")
 		for i, by := range stmt.OrderBy {
 			if i > 0 {
-				s += ", "
+				buf.WriteString(", ")
 			}
-			s += by.Expr.String()
+			buf.WriteString(by.Expr.String())
 			if by.Reverse {
-				s += " DESC"
+				buf.WriteString(" DESC")
 			} else {
-				s += " ASC"
+				buf.WriteString(" ASC")
 			}
 		}
 	}
-	return s
+	return buf.String()
 }
 
 type JoinType int
@@ -311,19 +308,21 @@ func (jt JoinType) String() string {
 }
 
 func (fj FromJoin) String() string {
-	s := fmt.Sprintf("%s %s %s", fj.Left, fj.Type.String(), fj.Right)
+	var buf strings.Builder
+	fmt.Fprintf(&buf, "(%s %s %s", fj.Left, fj.Type.String(), fj.Right)
 	if fj.On != nil {
-		s += fmt.Sprintf(" ON %s", fj.On.String())
+		fmt.Fprintf(&buf, " ON %s", fj.On.String())
 	}
 	if len(fj.Using) > 0 {
-		s += " USING ("
+		buf.WriteString(" USING (")
 		for i, id := range fj.Using {
 			if i > 0 {
-				s += ", "
+				buf.WriteString(", ")
 			}
-			s += id.String()
+			buf.WriteString(id.String())
 		}
-		s += ")"
+		buf.WriteRune(')')
 	}
-	return s
+	buf.WriteRune(')')
+	return buf.String()
 }

@@ -2,6 +2,7 @@ package sql
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/leftmike/maho/pkg/types"
 )
@@ -13,19 +14,21 @@ type IndexKey struct {
 }
 
 func (ik IndexKey) String() string {
-	s := "("
+	var buf strings.Builder
+	buf.WriteRune('(')
 	for i := range ik.Columns {
 		if i > 0 {
-			s += ", "
+			buf.WriteString(", ")
 		}
+		buf.WriteString(ik.Columns[i].String())
 		if ik.Reverse[i] {
-			s += fmt.Sprintf("%s DESC", ik.Columns[i])
+			buf.WriteString(" DESC")
 		} else {
-			s += fmt.Sprintf("%s ASC", ik.Columns[i])
+			buf.WriteString(" ASC")
 		}
 	}
-	s += ")"
-	return s
+	buf.WriteRune(')')
+	return buf.String()
 }
 
 func (ik IndexKey) Equal(oik IndexKey) bool {
@@ -114,30 +117,30 @@ type ForeignKey struct {
 }
 
 func (fk ForeignKey) String() string {
-	var s string
+	var buf strings.Builder
 	if fk.Name == 0 {
-		s = "CONSTRAINT FOREIGN KEY ("
+		buf.WriteString("CONSTRAINT FOREIGN KEY (")
 	} else {
-		s = fmt.Sprintf("CONSTRAINT %s FOREIGN KEY (", fk.Name)
+		fmt.Fprintf(&buf, "CONSTRAINT %s FOREIGN KEY (", fk.Name)
 	}
 	for i, c := range fk.FKCols {
 		if i > 0 {
-			s += ", "
+			buf.WriteString(", ")
 		}
-		s += c.String()
+		buf.WriteString(c.String())
 	}
-	s += fmt.Sprintf(") REFERENCES %s", fk.RefTable)
+	fmt.Fprintf(&buf, ") REFERENCES %s", fk.RefTable)
 	if len(fk.RefCols) > 0 {
-		s += " ("
+		buf.WriteString(" (")
 		for i, c := range fk.RefCols {
 			if i > 0 {
-				s += ", "
+				buf.WriteString(", ")
 			}
-			s += c.String()
+			buf.WriteString(c.String())
 		}
-		s += ")"
+		buf.WriteRune(')')
 	}
-	return s
+	return buf.String()
 }
 
 type CreateTable struct {
@@ -151,34 +154,35 @@ type CreateTable struct {
 }
 
 func (stmt *CreateTable) String() string {
-	s := "CREATE TABLE"
+	var buf strings.Builder
+	buf.WriteString("CREATE TABLE")
 	if stmt.IfNotExists {
-		s += " IF NOT EXISTS"
+		buf.WriteString(" IF NOT EXISTS")
 	}
-	s = fmt.Sprintf("%s %s (", s, stmt.Table)
+	fmt.Fprintf(&buf, " %s (", stmt.Table)
 
 	for i, ct := range stmt.ColumnTypes {
 		if i > 0 {
-			s += ", "
+			buf.WriteString(", ")
 		}
-		s += fmt.Sprintf("%s %s", stmt.Columns[i], ct.Type)
+		fmt.Fprintf(&buf, "%s %s", stmt.Columns[i], ct.Type)
 		if ct.NotNull {
-			s += " NOT NULL"
+			buf.WriteString(" NOT NULL")
 		}
 		cd := stmt.ColumnDefaults[i]
 		if cd != nil {
-			s += fmt.Sprintf(" DEFAULT %s", cd)
+			fmt.Fprintf(&buf, " DEFAULT %s", cd)
 		}
 	}
 	for _, c := range stmt.Constraints {
-		s += c.String()
+		buf.WriteString(c.String())
 	}
 	for _, fk := range stmt.ForeignKeys {
-		s += ", "
-		s += fk.String()
+		buf.WriteString(", ")
+		buf.WriteString(fk.String())
 	}
-	s += ")"
-	return s
+	buf.WriteRune(')')
+	return buf.String()
 }
 
 type CreateIndex struct {
@@ -189,16 +193,17 @@ type CreateIndex struct {
 }
 
 func (stmt *CreateIndex) String() string {
-	s := "CREATE"
+	var buf strings.Builder
+	buf.WriteString("CREATE")
 	if stmt.Key.Unique {
-		s += " UNIQUE "
+		buf.WriteString(" UNIQUE")
 	}
-	s += " INDEX"
+	buf.WriteString(" INDEX")
 	if stmt.IfNotExists {
-		s += " IF NOT EXISTS"
+		buf.WriteString(" IF NOT EXISTS")
 	}
-	s += fmt.Sprintf(" %s ON %s (%s)", stmt.Index, stmt.Table, stmt.Key)
-	return s
+	fmt.Fprintf(&buf, " %s ON %s %s", stmt.Index, stmt.Table, stmt.Key)
+	return buf.String()
 }
 
 type CreateDatabase struct {
@@ -207,14 +212,15 @@ type CreateDatabase struct {
 }
 
 func (stmt *CreateDatabase) String() string {
-	s := fmt.Sprintf("CREATE DATABASE %s", stmt.Database)
+	var buf strings.Builder
+	fmt.Fprintf(&buf, "CREATE DATABASE %s", stmt.Database)
 	if len(stmt.Options) > 0 {
-		s += " WITH"
+		buf.WriteString(" WITH")
 		for opt, val := range stmt.Options {
-			s = fmt.Sprintf("%s %s = %s", s, opt, val)
+			fmt.Fprintf(&buf, " %s = %s", opt, val)
 		}
 	}
-	return s
+	return buf.String()
 }
 
 type CreateSchema struct {
@@ -251,25 +257,25 @@ func (afk AddForeignKey) String() string {
 
 func (dc DropConstraint) String() string {
 	if dc.Name != 0 {
-		s := "DROP CONSTRAINT"
 		if dc.IfExists {
-			s += " IF EXISTS"
+			return fmt.Sprintf("DROP CONSTRAINT IF EXISTS %s", dc.Name)
 		}
-		return fmt.Sprintf("%s %s", s, dc.Name)
+		return fmt.Sprintf("DROP CONSTRAINT %s", dc.Name)
 	}
 
-	return fmt.Sprintf("ALTER %s DROP %s", dc.Column, dc.Type)
+	return fmt.Sprintf("ALTER COLUMN %s DROP %s", dc.Column, dc.Type)
 }
 
 func (stmt *AlterTable) String() string {
-	s := fmt.Sprintf("ALTER TABLE %s ", stmt.Table)
+	var buf strings.Builder
+	fmt.Fprintf(&buf, "ALTER TABLE %s ", stmt.Table)
 	for adx, act := range stmt.Actions {
 		if adx > 0 {
-			s += ", "
+			buf.WriteString(", ")
 		}
-		s += act.String()
+		buf.WriteString(act.String())
 	}
-	return s
+	return buf.String()
 }
 
 type DropTable struct {
@@ -279,20 +285,21 @@ type DropTable struct {
 }
 
 func (stmt *DropTable) String() string {
-	s := "DROP TABLE "
+	var buf strings.Builder
+	buf.WriteString("DROP TABLE ")
 	if stmt.IfExists {
-		s += "IF EXISTS "
+		buf.WriteString("IF EXISTS ")
 	}
 	for i, tbl := range stmt.Tables {
 		if i > 0 {
-			s += ", "
+			buf.WriteString(", ")
 		}
-		s += tbl.String()
+		buf.WriteString(tbl.String())
 	}
 	if stmt.Cascade {
-		s += " CASCADE"
+		buf.WriteString(" CASCADE")
 	}
-	return s
+	return buf.String()
 }
 
 type DropIndex struct {
@@ -302,12 +309,10 @@ type DropIndex struct {
 }
 
 func (stmt *DropIndex) String() string {
-	s := "DROP INDEX "
 	if stmt.IfExists {
-		s += "IF EXISTS "
+		return fmt.Sprintf("DROP INDEX IF EXISTS %s ON %s", stmt.Index, stmt.Table)
 	}
-	s += fmt.Sprintf("%s ON %s", stmt.Index, stmt.Table)
-	return s
+	return fmt.Sprintf("DROP INDEX %s ON %s", stmt.Index, stmt.Table)
 }
 
 type DropDatabase struct {
@@ -317,18 +322,19 @@ type DropDatabase struct {
 }
 
 func (stmt *DropDatabase) String() string {
-	s := "DROP DATABASE "
+	var buf strings.Builder
+	buf.WriteString("DROP DATABASE ")
 	if stmt.IfExists {
-		s += "IF EXISTS "
+		buf.WriteString("IF EXISTS ")
 	}
-	s += stmt.Database.String()
+	buf.WriteString(stmt.Database.String())
 	if len(stmt.Options) > 0 {
-		s += " WITH"
+		buf.WriteString(" WITH")
 		for opt, val := range stmt.Options {
-			s = fmt.Sprintf("%s %s = %s", s, opt, val)
+			fmt.Fprintf(&buf, " %s = %s", opt, val)
 		}
 	}
-	return s
+	return buf.String()
 }
 
 type DropSchema struct {
@@ -337,9 +343,8 @@ type DropSchema struct {
 }
 
 func (stmt *DropSchema) String() string {
-	s := "DROP SCHEMA "
 	if stmt.IfExists {
-		s += "IF EXISTS "
+		return fmt.Sprintf("DROP SCHEMA IF EXISTS %s", stmt.Schema)
 	}
-	return s + stmt.Schema.String()
+	return fmt.Sprintf("DROP SCHEMA %s", stmt.Schema)
 }

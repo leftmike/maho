@@ -9,6 +9,7 @@ import (
 
 type Expr interface {
 	String() string
+	isExpr()
 }
 
 type Literal struct {
@@ -105,6 +106,8 @@ func (l Literal) String() string {
 	return types.FormatValue(l.Value)
 }
 
+func (_ Literal) isExpr() {}
+
 func (ref Ref) String() string {
 	var buf strings.Builder
 	buf.WriteString(ref[0].String())
@@ -114,6 +117,8 @@ func (ref Ref) String() string {
 	}
 	return buf.String()
 }
+
+func (_ Ref) isExpr() {}
 
 func (se *SExpr) String() string {
 	var buf strings.Builder
@@ -129,6 +134,8 @@ func (se *SExpr) String() string {
 	return buf.String()
 }
 
+func (_ *SExpr) isExpr() {}
+
 func (ue *UnaryExpr) String() string {
 	if ue.Op == NoOp {
 		return ue.Expr.String()
@@ -136,9 +143,13 @@ func (ue *UnaryExpr) String() string {
 	return fmt.Sprintf("(%s %s)", opNames[ue.Op], ue.Expr)
 }
 
+func (_ *UnaryExpr) isExpr() {}
+
 func (be *BinaryExpr) String() string {
 	return fmt.Sprintf("(%s %s %s)", be.Left, opNames[be.Op], be.Right)
 }
+
+func (_ *BinaryExpr) isExpr() {}
 
 func (sq *Subquery) String() string {
 	switch sq.Op {
@@ -154,3 +165,5 @@ func (sq *Subquery) String() string {
 		panic(fmt.Sprintf("unexpected query expression op; got %v", sq.Op))
 	}
 }
+
+func (_ *Subquery) isExpr() {}
