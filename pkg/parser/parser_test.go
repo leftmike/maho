@@ -34,7 +34,7 @@ func TestScan(t *testing.T) {
 	for _, e := range tokens {
 		r := p.scan()
 		if e != r {
-			t.Errorf("scan(%q) got %s want %s", s, token.Format(r), token.Format(e))
+			t.Errorf("scan(%s) got %s want %s", s, token.Format(r), token.Format(e))
 		}
 	}
 
@@ -47,7 +47,7 @@ func TestScan(t *testing.T) {
 			for j := lookBackAmount; j > 0; j-- {
 				r := p.scan()
 				if tokens[i-j] != r {
-					t.Errorf("scan(%q) got %s want %s", s, token.Format(r),
+					t.Errorf("scan(%s) got %s want %s", s, token.Format(r),
 						token.Format(tokens[i-j]))
 				}
 			}
@@ -55,7 +55,7 @@ func TestScan(t *testing.T) {
 
 		r := p.scan()
 		if tokens[i] != r {
-			t.Errorf("scan(%q) got %s want %s", s, token.Format(r), token.Format(tokens[i]))
+			t.Errorf("scan(%s) got %s want %s", s, token.Format(r), token.Format(tokens[i]))
 		}
 	}
 }
@@ -75,7 +75,7 @@ func TestParse(t *testing.T) {
 		p := NewParser(strings.NewReader(f), fmt.Sprintf("failed[%d]", i))
 		stmt, err := p.Parse()
 		if stmt != nil || err == nil {
-			t.Errorf("Parse(%q) did not fail", f)
+			t.Errorf("Parse(%s) did not fail", f)
 		}
 	}
 }
@@ -787,17 +787,17 @@ foreign key (c1) references t2 on delete set on update cascade)`,
 
 	for i, c := range cases {
 		p := NewParser(strings.NewReader(c.s), fmt.Sprintf("tests[%d]", i))
-		cs, err := p.Parse()
+		stmt, err := p.Parse()
 		if c.fail {
 			if err == nil {
-				t.Errorf("Parse(%q) did not fail", c.s)
+				t.Errorf("Parse(%s) did not fail", c.s)
 			}
 		} else {
 			if err != nil {
-				t.Errorf("Parse(%q) failed with %s", c.s, err)
-			} else if cs, ok := cs.(*sql.CreateTable); !ok ||
-				!reflect.DeepEqual(&c.stmt, cs) {
-				t.Errorf("Parse(%q) got %s want %s", c.s, cs.String(), c.stmt.String())
+				t.Errorf("Parse(%s) failed with %s", c.s, err)
+			} else if stmt, ok := stmt.(*sql.CreateTable); !ok ||
+				!reflect.DeepEqual(&c.stmt, stmt) {
+				t.Errorf("Parse(%s) got %s want %s", c.s, stmt.String(), c.stmt.String())
 			}
 		}
 	}
@@ -842,17 +842,17 @@ func TestCreateIndex(t *testing.T) {
 
 	for i, c := range cases {
 		p := NewParser(strings.NewReader(c.s), fmt.Sprintf("tests[%d]", i))
-		cs, err := p.Parse()
+		stmt, err := p.Parse()
 		if c.fail {
 			if err == nil {
-				t.Errorf("Parse(%q) did not fail", c.s)
+				t.Errorf("Parse(%s) did not fail", c.s)
 			}
 		} else {
 			if err != nil {
-				t.Errorf("Parse(%q) failed with %s", c.s, err)
-			} else if cs, ok := cs.(*sql.CreateIndex); !ok ||
-				!reflect.DeepEqual(&c.stmt, cs) {
-				t.Errorf("Parse(%q) got %s want %s", c.s, cs.String(), c.stmt.String())
+				t.Errorf("Parse(%s) failed with %s", c.s, err)
+			} else if stmt, ok := stmt.(*sql.CreateIndex); !ok ||
+				!reflect.DeepEqual(&c.stmt, stmt) {
+				t.Errorf("Parse(%s) got %s want %s", c.s, stmt.String(), c.stmt.String())
 			}
 		}
 	}
@@ -909,17 +909,17 @@ func TestInsertValues(t *testing.T) {
 
 	for i, c := range cases {
 		p := NewParser(strings.NewReader(c.s), fmt.Sprintf("tests[%d]", i))
-		is, err := p.Parse()
+		stmt, err := p.Parse()
 		if c.fail {
 			if err == nil {
-				t.Errorf("Parse(%q) did not fail", c.s)
+				t.Errorf("Parse(%s) did not fail", c.s)
 			}
 		} else {
 			if err != nil {
-				t.Errorf("Parse(%q) failed with %s", c.s, err)
-			} else if is, ok := is.(*sql.InsertValues); !ok ||
-				!reflect.DeepEqual(&c.stmt, is) {
-				t.Errorf("Parse(%q) got %s want %s", c.s, is.String(), c.stmt.String())
+				t.Errorf("Parse(%s) failed with %s", c.s, err)
+			} else if stmt, ok := stmt.(*sql.InsertValues); !ok ||
+				!reflect.DeepEqual(&c.stmt, stmt) {
+				t.Errorf("Parse(%s) got %s want %s", c.s, stmt.String(), c.stmt.String())
 			}
 		}
 	}
@@ -974,9 +974,9 @@ func TestParseExpr(t *testing.T) {
 		p := NewParser(strings.NewReader(c.s), fmt.Sprintf("cases[%d]", i))
 		e, err := p.ParseExpr()
 		if err != nil {
-			t.Errorf("ParseExpr(%q) failed with %s", c.s, err)
+			t.Errorf("ParseExpr(%s) failed with %s", c.s, err)
 		} else if c.expr != e.String() {
-			t.Errorf("ParseExpr(%q) got %s want %s", c.s, e, c.expr)
+			t.Errorf("ParseExpr(%s) got %s want %s", c.s, e, c.expr)
 		}
 	}
 
@@ -1003,7 +1003,7 @@ func TestParseExpr(t *testing.T) {
 		p := NewParser(strings.NewReader(f), fmt.Sprintf("fails[%d]", i))
 		e, err := p.ParseExpr()
 		if err == nil {
-			t.Errorf("ParseExpr(%q) did not fail, got %s", f, e)
+			t.Errorf("ParseExpr(%s) did not fail, got %s", f, e)
 		}
 	}
 }
@@ -1520,20 +1520,135 @@ func TestSelect(t *testing.T) {
 					Right: int64Literal(1)},
 			},
 		},
+		{
+			s: "select t1.c1, t2.c2 from (t1 cross join t2)",
+			stmt: sql.Select{
+				From: sql.FromJoin{
+					Left: &sql.FromTableAlias{
+						TableName: types.TableName{Table: types.ID("t1", false)},
+					},
+					Right: &sql.FromTableAlias{
+						TableName: types.TableName{Table: types.ID("t2", false)},
+					},
+					Type: sql.CrossJoin,
+				},
+				Results: []sql.SelectResult{
+					sql.ExprResult{Expr: sql.Ref{types.ID("t1", false), types.ID("c1", false)}},
+					sql.ExprResult{Expr: sql.Ref{types.ID("t2", false), types.ID("c2", false)}},
+				},
+			},
+		},
+		{
+			s: "select * from ((t1 cross join t2) cross join t3)",
+			stmt: sql.Select{
+				From: sql.FromJoin{
+					Left: sql.FromJoin{
+						Left: &sql.FromTableAlias{
+							TableName: types.TableName{Table: types.ID("t1", false)},
+						},
+						Right: &sql.FromTableAlias{
+							TableName: types.TableName{Table: types.ID("t2", false)},
+						},
+						Type: sql.CrossJoin,
+					},
+					Right: &sql.FromTableAlias{
+						TableName: types.TableName{Table: types.ID("t3", false)},
+					},
+					Type: sql.CrossJoin,
+				},
+			},
+		},
+		{
+			s: "select * from ((t1 join t2 using (c1)) cross join t3)",
+			stmt: sql.Select{
+				From: sql.FromJoin{
+					Left: sql.FromJoin{
+						Left: &sql.FromTableAlias{
+							TableName: types.TableName{Table: types.ID("t1", false)},
+						},
+						Right: &sql.FromTableAlias{
+							TableName: types.TableName{Table: types.ID("t2", false)},
+						},
+						Type:  sql.Join,
+						Using: []types.Identifier{types.ID("c1", false)},
+					},
+					Right: &sql.FromTableAlias{
+						TableName: types.TableName{Table: types.ID("t3", false)},
+					},
+					Type: sql.CrossJoin,
+				},
+			},
+		},
+		{
+			s: "select * from ((t1 cross join t2) right join t3 using (c1))",
+			stmt: sql.Select{
+				From: sql.FromJoin{
+					Left: sql.FromJoin{
+						Left: &sql.FromTableAlias{
+							TableName: types.TableName{Table: types.ID("t1", false)},
+						},
+						Right: &sql.FromTableAlias{
+							TableName: types.TableName{Table: types.ID("t2", false)},
+						},
+						Type: sql.CrossJoin,
+					},
+					Right: &sql.FromTableAlias{
+						TableName: types.TableName{Table: types.ID("t3", false)},
+					},
+					Type:  sql.RightJoin,
+					Using: []types.Identifier{types.ID("c1", false)},
+				},
+			},
+		},
+		{
+			s: "select * from (t1 join t2 on c1 > 5)",
+			stmt: sql.Select{
+				From: sql.FromJoin{
+					Left: &sql.FromTableAlias{
+						TableName: types.TableName{Table: types.ID("t1", false)},
+					},
+					Right: &sql.FromTableAlias{
+						TableName: types.TableName{Table: types.ID("t2", false)},
+					},
+					Type: sql.Join,
+					On: &sql.BinaryExpr{Op: sql.GreaterThanOp,
+						Left: sql.Ref{types.ID("c1", false)}, Right: int64Literal(5)},
+				},
+			},
+		},
+		{
+			s: "select * from (t1 join t2 using (c1, c2, c3))",
+			stmt: sql.Select{
+				From: sql.FromJoin{
+					Left: &sql.FromTableAlias{
+						TableName: types.TableName{Table: types.ID("t1", false)},
+					},
+					Right: &sql.FromTableAlias{
+						TableName: types.TableName{Table: types.ID("t2", false)},
+					},
+					Type: sql.Join,
+					Using: []types.Identifier{
+						types.ID("c1", false),
+						types.ID("c2", false),
+						types.ID("c3", false),
+					},
+				},
+			},
+		},
 	}
 
 	for i, c := range cases {
 		p := NewParser(strings.NewReader(c.s), fmt.Sprintf("tests[%d]", i))
-		ss, err := p.Parse()
+		stmt, err := p.Parse()
 		if c.fail {
 			if err == nil {
-				t.Errorf("Parse(%q) did not fail", c.s)
+				t.Errorf("Parse(%s) did not fail", c.s)
 			}
 		} else {
 			if err != nil {
-				t.Errorf("Parse(%q) failed with %s", c.s, err)
-			} else if ss, ok := ss.(*sql.Select); !ok || !reflect.DeepEqual(&c.stmt, ss) {
-				t.Errorf("Parse(%q) got %s want %s", c.s, ss.String(), c.stmt.String())
+				t.Errorf("Parse(%s) failed with %s", c.s, err)
+			} else if stmt, ok := stmt.(*sql.Select); !ok || !reflect.DeepEqual(&c.stmt, stmt) {
+				t.Errorf("Parse(%s) got %#v want %#v", c.s, stmt, c.stmt)
 			}
 		}
 	}
@@ -1574,16 +1689,16 @@ func TestValues(t *testing.T) {
 
 	for i, c := range cases {
 		p := NewParser(strings.NewReader(c.s), fmt.Sprintf("tests[%d]", i))
-		vs, err := p.Parse()
+		stmt, err := p.Parse()
 		if c.fail {
 			if err == nil {
-				t.Errorf("Parse(%q) did not fail", c.s)
+				t.Errorf("Parse(%s) did not fail", c.s)
 			}
 		} else {
 			if err != nil {
-				t.Errorf("Parse(%q) failed with %s", c.s, err)
-			} else if vs, ok := vs.(*sql.Values); !ok || !reflect.DeepEqual(&c.stmt, vs) {
-				t.Errorf("Parse(%q) got %s want %s", c.s, vs.String(), c.stmt.String())
+				t.Errorf("Parse(%s) failed with %s", c.s, err)
+			} else if stmt, ok := stmt.(*sql.Values); !ok || !reflect.DeepEqual(&c.stmt, stmt) {
+				t.Errorf("Parse(%s) got %s want %s", c.s, stmt.String(), c.stmt.String())
 			}
 		}
 	}
@@ -1618,16 +1733,16 @@ func TestDelete(t *testing.T) {
 
 	for i, c := range cases {
 		p := NewParser(strings.NewReader(c.s), fmt.Sprintf("tests[%d]", i))
-		ds, err := p.Parse()
+		stmt, err := p.Parse()
 		if c.fail {
 			if err == nil {
-				t.Errorf("Parse(%q) did not fail", c.s)
+				t.Errorf("Parse(%s) did not fail", c.s)
 			}
 		} else {
 			if err != nil {
-				t.Errorf("Parse(%q) failed with %s", c.s, err)
-			} else if ds, ok := ds.(*sql.Delete); !ok || !reflect.DeepEqual(&c.stmt, ds) {
-				t.Errorf("Parse(%q) got %s want %s", c.s, ds.String(), c.stmt.String())
+				t.Errorf("Parse(%s) failed with %s", c.s, err)
+			} else if stmt, ok := stmt.(*sql.Delete); !ok || !reflect.DeepEqual(&c.stmt, stmt) {
+				t.Errorf("Parse(%s) got %s want %s", c.s, stmt.String(), c.stmt.String())
 			}
 		}
 	}
@@ -1694,16 +1809,16 @@ func TestUpdate(t *testing.T) {
 
 	for i, c := range cases {
 		p := NewParser(strings.NewReader(c.s), fmt.Sprintf("tests[%d]", i))
-		us, err := p.Parse()
+		stmt, err := p.Parse()
 		if c.fail {
 			if err == nil {
-				t.Errorf("Parse(%q) did not fail", c.s)
+				t.Errorf("Parse(%s) did not fail", c.s)
 			}
 		} else {
 			if err != nil {
-				t.Errorf("Parse(%q) failed with %s", c.s, err)
-			} else if us, ok := us.(*sql.Update); !ok || !reflect.DeepEqual(&c.stmt, us) {
-				t.Errorf("Parse(%q) got %s want %s", c.s, us.String(), c.stmt.String())
+				t.Errorf("Parse(%s) failed with %s", c.s, err)
+			} else if stmt, ok := stmt.(*sql.Update); !ok || !reflect.DeepEqual(&c.stmt, stmt) {
+				t.Errorf("Parse(%s) got %s want %s", c.s, stmt.String(), c.stmt.String())
 			}
 		}
 	}
@@ -1742,17 +1857,17 @@ func TestCreateDatabase(t *testing.T) {
 
 	for i, c := range cases {
 		p := NewParser(strings.NewReader(c.s), fmt.Sprintf("tests[%d]", i))
-		cd, err := p.Parse()
+		stmt, err := p.Parse()
 		if c.fail {
 			if err == nil {
-				t.Errorf("Parse(%q) did not fail", c.s)
+				t.Errorf("Parse(%s) did not fail", c.s)
 			}
 		} else {
 			if err != nil {
-				t.Errorf("Parse(%q) failed with %s", c.s, err)
+				t.Errorf("Parse(%s) failed with %s", c.s, err)
 			} else {
-				if !reflect.DeepEqual(c.stmt, cd) {
-					t.Errorf("Parse(%q) got %s want %s", c.s, cd.String(), c.stmt.String())
+				if !reflect.DeepEqual(c.stmt, stmt) {
+					t.Errorf("Parse(%s) got %s want %s", c.s, stmt.String(), c.stmt.String())
 				}
 			}
 		}
@@ -1894,17 +2009,17 @@ alter column c1 drop default, alter c2 drop not null, drop constraint con`,
 
 	for i, c := range cases {
 		p := NewParser(strings.NewReader(c.s), fmt.Sprintf("tests[%d]", i))
-		cd, err := p.Parse()
+		stmt, err := p.Parse()
 		if c.fail {
 			if err == nil {
-				t.Errorf("Parse(%q) did not fail", c.s)
+				t.Errorf("Parse(%s) did not fail", c.s)
 			}
 		} else {
 			if err != nil {
-				t.Errorf("Parse(%q) failed with %s", c.s, err)
+				t.Errorf("Parse(%s) failed with %s", c.s, err)
 			} else {
-				if !reflect.DeepEqual(c.stmt, cd) {
-					t.Errorf("Parse(%q) got %s want %s", c.s, cd.String(), c.stmt.String())
+				if !reflect.DeepEqual(c.stmt, stmt) {
+					t.Errorf("Parse(%s) got %s want %s", c.s, stmt.String(), c.stmt.String())
 				}
 			}
 		}

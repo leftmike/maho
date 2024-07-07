@@ -10,8 +10,8 @@ import (
 )
 
 /*
-
- */
+- add pkg/plan
+*/
 
 func main() {
 	p := parser.NewParser(bufio.NewReader(os.Stdin), "console")

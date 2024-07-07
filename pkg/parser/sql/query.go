@@ -84,6 +84,10 @@ func (stmt *Copy) String() string {
 	return buf.String()
 }
 
+func (stmt *Copy) Resolve(r Resolver) {
+	stmt.Table = r.ResolveTable(stmt.Table)
+}
+
 type Delete struct {
 	Table types.TableName
 	Where Expr
@@ -94,6 +98,10 @@ func (stmt *Delete) String() string {
 		return fmt.Sprintf("DELETE FROM %s WHERE %s", stmt.Table, stmt.Where)
 	}
 	return fmt.Sprintf("DELETE FROM %s", stmt.Table)
+}
+
+func (stmt *Delete) Resolve(r Resolver) {
+	stmt.Table = r.ResolveTable(stmt.Table)
 }
 
 type InsertValues struct {
@@ -139,6 +147,10 @@ func (stmt *InsertValues) String() string {
 	return buf.String()
 }
 
+func (stmt *InsertValues) Resolve(r Resolver) {
+	stmt.Table = r.ResolveTable(stmt.Table)
+}
+
 type ColumnUpdate struct {
 	Column types.Identifier
 	Expr   Expr
@@ -163,6 +175,10 @@ func (stmt *Update) String() string {
 		fmt.Fprintf(&buf, " WHERE %s", stmt.Where)
 	}
 	return buf.String()
+}
+
+func (stmt *Update) Resolve(r Resolver) {
+	stmt.Table = r.ResolveTable(stmt.Table)
 }
 
 type Values struct {
@@ -190,6 +206,8 @@ func (stmt *Values) String() string {
 	}
 	return buf.String()
 }
+
+func (_ *Values) Resolve(r Resolver) {}
 
 type SelectResult interface {
 	String() string
@@ -274,6 +292,8 @@ func (stmt *Select) String() string {
 	}
 	return buf.String()
 }
+
+func (_ *Select) Resolve(r Resolver) {}
 
 type JoinType int
 

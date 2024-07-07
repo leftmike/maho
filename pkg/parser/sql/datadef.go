@@ -185,6 +185,10 @@ func (stmt *CreateTable) String() string {
 	return buf.String()
 }
 
+func (stmt *CreateTable) Resolve(r Resolver) {
+	stmt.Table = r.ResolveTable(stmt.Table)
+}
+
 type CreateIndex struct {
 	Index       types.Identifier
 	Table       types.TableName
@@ -206,6 +210,10 @@ func (stmt *CreateIndex) String() string {
 	return buf.String()
 }
 
+func (stmt *CreateIndex) Resolve(r Resolver) {
+	stmt.Table = r.ResolveTable(stmt.Table)
+}
+
 type CreateDatabase struct {
 	Database types.Identifier
 	Options  map[types.Identifier]string
@@ -223,12 +231,18 @@ func (stmt *CreateDatabase) String() string {
 	return buf.String()
 }
 
+func (_ *CreateDatabase) Resolve(r Resolver) {}
+
 type CreateSchema struct {
 	Schema types.SchemaName
 }
 
 func (stmt *CreateSchema) String() string {
 	return fmt.Sprintf("CREATE SCHEMA %s", stmt.Schema)
+}
+
+func (stmt *CreateSchema) Resolve(r Resolver) {
+	stmt.Schema = r.ResolveSchema(stmt.Schema)
 }
 
 type AlterAction interface {
@@ -278,6 +292,10 @@ func (stmt *AlterTable) String() string {
 	return buf.String()
 }
 
+func (stmt *AlterTable) Resolve(r Resolver) {
+	stmt.Table = r.ResolveTable(stmt.Table)
+}
+
 type DropTable struct {
 	IfExists bool
 	Cascade  bool
@@ -302,6 +320,12 @@ func (stmt *DropTable) String() string {
 	return buf.String()
 }
 
+func (stmt *DropTable) Resolve(r Resolver) {
+	for idx := range stmt.Tables {
+		stmt.Tables[idx] = r.ResolveTable(stmt.Tables[idx])
+	}
+}
+
 type DropIndex struct {
 	Table    types.TableName
 	Index    types.Identifier
@@ -313,6 +337,10 @@ func (stmt *DropIndex) String() string {
 		return fmt.Sprintf("DROP INDEX IF EXISTS %s ON %s", stmt.Index, stmt.Table)
 	}
 	return fmt.Sprintf("DROP INDEX %s ON %s", stmt.Index, stmt.Table)
+}
+
+func (stmt *DropIndex) Resolve(r Resolver) {
+	stmt.Table = r.ResolveTable(stmt.Table)
 }
 
 type DropDatabase struct {
@@ -337,6 +365,8 @@ func (stmt *DropDatabase) String() string {
 	return buf.String()
 }
 
+func (_ *DropDatabase) Resolve(r Resolver) {}
+
 type DropSchema struct {
 	IfExists bool
 	Schema   types.SchemaName
@@ -347,4 +377,8 @@ func (stmt *DropSchema) String() string {
 		return fmt.Sprintf("DROP SCHEMA IF EXISTS %s", stmt.Schema)
 	}
 	return fmt.Sprintf("DROP SCHEMA %s", stmt.Schema)
+}
+
+func (stmt *DropSchema) Resolve(r Resolver) {
+	stmt.Schema = r.ResolveSchema(stmt.Schema)
 }

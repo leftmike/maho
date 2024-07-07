@@ -1653,7 +1653,6 @@ func (p *Parser) parseUpdate() sql.Stmt {
 }
 
 func (p *Parser) parseSet() sql.Stmt {
-	return nil
 	// SET variable ( TO | '=' ) literal
 	var s sql.Set
 
@@ -1952,7 +1951,7 @@ func (p *Parser) parseExplain() sql.Stmt {
 		s.Stmt = p.parseSelect()
 	}
 
-	return s
+	return &s
 }
 
 /* XXX

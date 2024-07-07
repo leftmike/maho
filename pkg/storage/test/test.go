@@ -14,20 +14,6 @@ import (
 
 type NewStore func(dataDir string) (storage.Store, error)
 
-func errorPanicked(fn func() error) (err error, panicked bool) {
-	defer func() {
-		if r := recover(); r != nil {
-			if _, ok := r.(string); ok {
-				panicked = true
-			} else {
-				panic(r)
-			}
-		}
-	}()
-
-	return fn(), false
-}
-
 func tableErrorPanicked(fn func() (storage.Table, error)) (tbl storage.Table, err error,
 	panicked bool) {
 
@@ -250,7 +236,7 @@ func testStorage(t *testing.T, tx storage.Transaction, tbl storage.Table,
 			}
 		case CreateTable:
 			tn := tableName(c.tid)
-			err, panicked := errorPanicked(func() error {
+			err, panicked := testutil.ErrorPanicked(func() error {
 				return tx.CreateTable(ctx, c.tid, tn, c.colNames, c.colTypes, c.primary)
 			})
 			if panicked {
@@ -263,7 +249,7 @@ func testStorage(t *testing.T, tx storage.Transaction, tbl storage.Table,
 				t.Errorf("CreateTable(%d) failed with %s", c.tid, err)
 			}
 		case DropTable:
-			err, panicked := errorPanicked(func() error {
+			err, panicked := testutil.ErrorPanicked(func() error {
 				return tx.DropTable(ctx, c.tid)
 			})
 			if panicked {
@@ -317,7 +303,7 @@ func testStorage(t *testing.T, tx storage.Transaction, tbl storage.Table,
 				}
 			}
 		case Commit:
-			err, panicked := errorPanicked(func() error {
+			err, panicked := testutil.ErrorPanicked(func() error {
 				return tx.Commit(ctx)
 			})
 			if panicked {
@@ -334,7 +320,7 @@ func testStorage(t *testing.T, tx storage.Transaction, tbl storage.Table,
 				tx = nil
 			}
 		case Rollback:
-			err, panicked := errorPanicked(func() error {
+			err, panicked := testutil.ErrorPanicked(func() error {
 				return tx.Rollback()
 			})
 			if panicked {
@@ -364,7 +350,7 @@ func testStorage(t *testing.T, tx storage.Transaction, tbl storage.Table,
 				t.Errorf("%d.Rows() failed with %s", tbl.TID(), err)
 			}
 		case Update:
-			err, panicked := errorPanicked(func() error {
+			err, panicked := testutil.ErrorPanicked(func() error {
 				return tbl.Update(ctx, rid, c.cols, c.vals)
 			})
 			if panicked {
@@ -381,7 +367,7 @@ func testStorage(t *testing.T, tx storage.Transaction, tbl storage.Table,
 				t.Errorf("%d.Update() failed with %s", tbl.TID(), err)
 			}
 		case Delete:
-			err, panicked := errorPanicked(func() error {
+			err, panicked := testutil.ErrorPanicked(func() error {
 				return tbl.Delete(ctx, rid)
 			})
 			if panicked {
@@ -450,7 +436,7 @@ func testStorage(t *testing.T, tx storage.Transaction, tbl storage.Table,
 				t.Errorf("Rows(%d).Current() failed with %s", tbl.TID(), err)
 			}
 		case Close:
-			err, panicked := errorPanicked(func() error {
+			err, panicked := testutil.ErrorPanicked(func() error {
 				return rows.Close(ctx)
 			})
 			if panicked {
