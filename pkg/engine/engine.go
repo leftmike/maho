@@ -18,7 +18,7 @@ type Transaction interface {
 	Rollback() error
 
 	CreateSchema(ctx context.Context, sn types.SchemaName) error
-	DropSchema(ctx context.Context, ifExists bool, sn types.SchemaName) error
+	DropSchema(ctx context.Context, sn types.SchemaName, ifExists bool) error
 	ListSchemas(ctx context.Context, dn types.Identifier) ([]types.Identifier, error)
 
 	LookupTable(ctx context.Context, tn types.TableName) (Table, error)
@@ -75,7 +75,7 @@ func (tx *transaction) CreateSchema(ctx context.Context, sn types.SchemaName) er
 	return nil
 }
 
-func (tx *transaction) DropSchema(ctx context.Context, ifExists bool, sn types.SchemaName) error {
+func (tx *transaction) DropSchema(ctx context.Context, sn types.SchemaName, ifExists bool) error {
 	// XXX
 	return nil
 }

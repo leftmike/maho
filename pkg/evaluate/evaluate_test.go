@@ -1,12 +1,12 @@
 package evaluate_test
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"strings"
 	"testing"
 
-	"github.com/leftmike/maho/pkg/engine"
 	"github.com/leftmike/maho/pkg/evaluate"
 	"github.com/leftmike/maho/pkg/evaluate/test"
 	"github.com/leftmike/maho/pkg/parser"
@@ -57,11 +57,9 @@ func TestEvaluatePanic(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	var tx engine.Transaction
-
 	for _, c := range cases {
 		err, panicked := testutil.ErrorPanicked(func() error {
-			return evaluate.Evaluate(ctx, tx, c.stmt)
+			return evaluate.Evaluate(ctx, nil, c.stmt)
 		})
 		if panicked {
 			if !c.panicked {
@@ -82,21 +80,29 @@ func TestEvaluatePanic(t *testing.T) {
 func TestEvaluate(t *testing.T) {
 	cases := []evaluateCase{
 		{
-			stmt: mustParse("create schema sn"),
-			expect: []interface{}{
-				test.CreateSchema{
-					Schema: types.SchemaName{types.ID("db", false), types.ID("sn", false)},
-				},
-			},
+			trace: "Begin()",
+		},
+		{
+			stmt:  mustParse("create schema sn"),
+			trace: "CreateSchema(db.sn)",
 		},
 	}
 
-	tx := test.NewMockTransaction(t, evaluateExpect(cases))
-	ses := evaluate.NewSession(nil, types.ID("db", false), types.ID("sn", false))
+	var buf bytes.Buffer
+	eng := test.NewEngine(&buf)
+	tx := eng.Begin()
+	r := test.Resolver{
+		Database: types.ID("db", false),
+		Schema:   types.ID("sn", false),
+	}
 
 	ctx := context.Background()
 	for _, c := range cases {
-		c.stmt.Resolve(ses)
+		if c.stmt == nil {
+			continue
+		}
+
+		c.stmt.Resolve(r)
 
 		err := evaluate.Evaluate(ctx, tx, c.stmt)
 		if err != nil {
@@ -106,5 +112,11 @@ func TestEvaluate(t *testing.T) {
 		} else if c.fail {
 			t.Errorf("Evaluate(%s) did not fail", c.stmt)
 		}
+	}
+
+	got := buf.String()
+	want := evaluateTrace(cases)
+	if got != want {
+		t.Errorf("Evaluate() got %s want %s", got, want)
 	}
 }

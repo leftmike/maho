@@ -23,7 +23,7 @@ func Evaluate(ctx context.Context, tx engine.Transaction, stmt sql.Stmt) error {
 	case *sql.DropDatabase:
 		panic("evaluate: drop database unexpected")
 	case *sql.DropSchema:
-		return tx.DropSchema(ctx, stmt.IfExists, stmt.Schema)
+		return tx.DropSchema(ctx, stmt.Schema, stmt.IfExists)
 	case *sql.DropTable:
 		return EvaluateDropTable(ctx, tx, stmt)
 	case *sql.Rollback:

@@ -1,13 +1,15 @@
 package evaluate_test
 
 import (
+	"bytes"
 	"context"
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/leftmike/maho/pkg/evaluate"
 	"github.com/leftmike/maho/pkg/evaluate/test"
 	"github.com/leftmike/maho/pkg/parser/sql"
-	"github.com/leftmike/maho/pkg/storage"
 	"github.com/leftmike/maho/pkg/testutil"
 	"github.com/leftmike/maho/pkg/types"
 )
@@ -16,25 +18,25 @@ type evaluateCase struct {
 	stmt     sql.Stmt
 	panicked bool
 	fail     bool
-	expect   []interface{}
+	trace    string
 }
 
-func evaluateExpect(cases []evaluateCase) []interface{} {
-	var expect []interface{}
+func evaluateTrace(cases []evaluateCase) string {
+	var buf strings.Builder
 	for _, c := range cases {
-		if c.expect != nil {
-			expect = append(expect, c.expect...)
+		if c.trace != "" {
+			fmt.Fprintln(&buf, c.trace)
 		}
 	}
 
-	return expect
+	return buf.String()
 }
 
 func TestSessionResolve(t *testing.T) {
 	database := types.ID("maho", false)
 	schema := types.PUBLIC
 
-	ses := evaluate.NewSession(test.NewMockEngine(t, nil), database, schema)
+	ses := evaluate.NewSession(test.NewEngine(nil), database, schema)
 
 	tn := types.TableName{Table: types.ID("tbl", false)}
 	rtn := types.TableName{
@@ -83,16 +85,16 @@ func TestSessionResolve(t *testing.T) {
 func TestSessionBegin(t *testing.T) {
 	cases := []evaluateCase{
 		{
-			stmt:   mustParse("begin"),
-			expect: []interface{}{test.Begin{}},
+			stmt:  mustParse("begin"),
+			trace: "Begin()",
 		},
 		{
 			stmt: mustParse("begin"),
 			fail: true,
 		},
 		{
-			stmt:   mustParse("commit"),
-			expect: []interface{}{test.Commit{}},
+			stmt:  mustParse("commit"),
+			trace: "Commit()",
 		},
 		{
 			stmt: mustParse("commit"),
@@ -103,41 +105,33 @@ func TestSessionBegin(t *testing.T) {
 			fail: true,
 		},
 		{
-			stmt:   mustParse("begin"),
-			expect: []interface{}{test.Begin{}},
+			stmt:  mustParse("begin"),
+			trace: "Begin()",
 		},
 		{
-			stmt:   mustParse("rollback"),
-			expect: []interface{}{test.Rollback{}},
+			stmt:  mustParse("rollback"),
+			trace: "Rollback()",
 		},
 		{
 			stmt: mustParse("set database = 'db'"),
 		},
 		{
 			stmt: mustParse("create schema sn"),
-			expect: []interface{}{
-				test.Begin{},
-				test.CreateSchema{
-					Schema: types.SchemaName{types.ID("db", false), types.ID("sn", false)},
-				},
-				test.Commit{},
-			},
+			trace: `Begin()
+CreateSchema(db.sn)
+Commit()`,
 		},
 		{
 			stmt: mustParse("create schema sn"),
 			fail: true,
-			expect: []interface{}{
-				test.Begin{},
-				test.CreateSchema{
-					Schema: types.SchemaName{types.ID("db", false), types.ID("sn", false)},
-					Fail:   true,
-				},
-				test.Rollback{},
-			},
+			trace: `Begin()
+CreateSchema(db.sn)
+Rollback()`,
 		},
 	}
 
-	eng := test.NewMockEngine(t, evaluateExpect(cases))
+	var buf bytes.Buffer
+	eng := test.NewEngine(&buf)
 	ses := evaluate.NewSession(eng, types.ID("maho", false), types.PUBLIC)
 
 	ctx := context.Background()
@@ -159,34 +153,27 @@ func TestSessionBegin(t *testing.T) {
 			t.Errorf("Evaluate(%s) did not fail", c.stmt)
 		}
 	}
+
+	got := buf.String()
+	want := evaluateTrace(cases)
+	if got != want {
+		t.Errorf("Evaluate() got %s want %s", got, want)
+	}
 }
 
 func TestSessionEvaluate(t *testing.T) {
 	cases := []evaluateCase{
 		{
-			stmt: mustParse("create database db with this=123 that 'abcdef'"),
-			expect: []interface{}{
-				test.CreateDatabase{
-					Database: types.ID("db", false),
-					Options: storage.OptionsMap{
-						types.ID("this", false): "123",
-						types.ID("that", false): "abcdef",
-					},
-				},
-			},
+			stmt:  mustParse("create database db with this=123 that 'abcdef'"),
+			trace: "CreateDatabase(db, map[this:123 that:abcdef])",
 		},
 		{
-			stmt: mustParse("drop database if exists db"),
-			expect: []interface{}{
-				test.DropDatabase{
-					Database: types.ID("db", false),
-					IfExists: true,
-				},
-			},
+			stmt:  mustParse("drop database if exists db"),
+			trace: "DropDatabase(db, true)",
 		},
 		{
-			stmt:   mustParse("begin"),
-			expect: []interface{}{test.Begin{}},
+			stmt:  mustParse("begin"),
+			trace: "Begin()",
 		},
 		{
 			stmt: mustParse("create database db"),
@@ -198,7 +185,8 @@ func TestSessionEvaluate(t *testing.T) {
 		},
 	}
 
-	eng := test.NewMockEngine(t, evaluateExpect(cases))
+	var buf bytes.Buffer
+	eng := test.NewEngine(&buf)
 	ses := evaluate.NewSession(eng, types.ID("maho", false), types.PUBLIC)
 	ctx := context.Background()
 
@@ -219,5 +207,11 @@ func TestSessionEvaluate(t *testing.T) {
 		} else if c.fail {
 			t.Errorf("Evaluate(%s) did not fail", c.stmt)
 		}
+	}
+
+	got := buf.String()
+	want := evaluateTrace(cases)
+	if got != want {
+		t.Errorf("Evaluate() got %s want %s", got, want)
 	}
 }

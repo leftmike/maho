@@ -2,195 +2,201 @@ package test
 
 import (
 	"context"
-	"errors"
-	"reflect"
-	"testing"
+	"fmt"
+	"io"
 
 	"github.com/leftmike/maho/pkg/engine"
 	"github.com/leftmike/maho/pkg/storage"
 	"github.com/leftmike/maho/pkg/types"
 )
 
-func NewMockEngine(t *testing.T, expect []interface{}) engine.Engine {
-	return &mock{
-		t:      t,
-		expect: expect,
+type Engine struct {
+	trace     io.Writer
+	databases map[types.Identifier]struct{}
+	schemas   map[types.SchemaName]struct{}
+	tables    map[types.TableName]*table
+	active    bool
+}
+
+type table struct {
+	// XXX
+}
+
+type transaction struct {
+	eng *Engine
+}
+
+func NewEngine(trace io.Writer) *Engine {
+	return &Engine{
+		trace:     trace,
+		databases: map[types.Identifier]struct{}{},
+		schemas:   map[types.SchemaName]struct{}{},
+		tables:    map[types.TableName]*table{},
 	}
 }
 
-func NewMockTransaction(t *testing.T, expect []interface{}) engine.Transaction {
-	return &mock{
-		t:      t,
-		expect: expect,
-	}
-}
-
-type mock struct {
-	t      *testing.T
-	expect []interface{}
-}
-
-type CreateDatabase struct {
-	Database types.Identifier
-	Options  storage.OptionsMap
-}
-
-func (m *mock) CreateDatabase(dn types.Identifier, opts storage.OptionsMap) error {
-	expect, ok := m.next("create database")
-	if !ok {
-		return nil
+func (eng *Engine) CreateDatabase(dn types.Identifier, opts storage.OptionsMap) error {
+	if eng.trace != nil {
+		fmt.Fprintf(eng.trace, "CreateDatabase(%s, %s)\n", dn, opts)
 	}
 
-	cd, ok := expect.(CreateDatabase)
-	if !ok {
-		m.t.Errorf("mock: got create database want %#v", expect)
-		return nil
+	if _, ok := eng.databases[dn]; ok {
+		return fmt.Errorf("engine: create database: database already exists: %s", dn)
 	}
-	if dn != cd.Database {
-		m.t.Errorf("mock: create database: dn: got %s want %s", dn, cd.Database)
-	}
-	if !reflect.DeepEqual(opts, cd.Options) {
-		m.t.Errorf("mock: create database: opts: got %v want %v", opts, cd.Options)
-	}
+
+	eng.databases[dn] = struct{}{}
 	return nil
 }
 
-type DropDatabase struct {
-	Database types.Identifier
-	IfExists bool
-}
-
-func (m *mock) DropDatabase(dn types.Identifier, ifExists bool) error {
-	expect, ok := m.next("drop database")
-	if !ok {
-		return nil
+func (eng *Engine) DropDatabase(dn types.Identifier, ifExists bool) error {
+	if eng.trace != nil {
+		fmt.Fprintf(eng.trace, "DropDatabase(%s, %v)\n", dn, ifExists)
 	}
 
-	dd, ok := expect.(DropDatabase)
-	if !ok {
-		m.t.Errorf("mock: got drop database want %#v", expect)
-		return nil
+	if _, ok := eng.databases[dn]; !ok {
+		if ifExists {
+			return nil
+		}
+
+		return fmt.Errorf("engine: drop database: database not found: %s", dn)
 	}
-	if dn != dd.Database {
-		m.t.Errorf("mock: drop database: dn: got %s want %s", dn, dd.Database)
-	}
-	if ifExists != dd.IfExists {
-		m.t.Errorf("mock: drop database: if exists: got %v want %v", ifExists, dd.IfExists)
-	}
+
+	delete(eng.databases, dn)
+
 	return nil
 }
 
-type Begin struct{}
-
-func (m *mock) next(what string) (interface{}, bool) {
-	if len(m.expect) == 0 {
-		m.t.Errorf("mock: got %s want nothing", what)
-		return nil, false
+func (eng *Engine) Begin() engine.Transaction {
+	if eng.trace != nil {
+		fmt.Fprintln(eng.trace, "Begin()")
 	}
-	expect := m.expect[0]
-	m.expect = m.expect[1:]
-	return expect, true
+
+	if eng.active {
+		panic("test engine only allows one active transaction")
+	}
+
+	eng.active = true
+	return &transaction{
+		eng: eng,
+	}
 }
 
-func (m *mock) Begin() engine.Transaction {
-	expect, ok := m.next("begin")
-	if !ok {
-		return nil
+func (tx *transaction) Commit(ctx context.Context) error {
+	if tx.eng.trace != nil {
+		fmt.Fprintln(tx.eng.trace, "Commit()")
 	}
 
-	_, ok = expect.(Begin)
-	if !ok {
-		m.t.Errorf("mock: got begin want %#v", expect)
-		return nil
-	}
-	return m
-}
-
-type Commit struct{}
-
-func (m *mock) Commit(ctx context.Context) error {
-	expect, ok := m.next("commit")
-	if !ok {
-		return nil
-	}
-
-	_, ok = expect.(Commit)
-	if !ok {
-		m.t.Errorf("mock: got commit want %#v", expect)
-		return nil
-	}
+	tx.eng.active = false
 	return nil
 }
 
-type Rollback struct{}
-
-func (m *mock) Rollback() error {
-	expect, ok := m.next("rollback")
-	if !ok {
-		return nil
+func (tx *transaction) Rollback() error {
+	if tx.eng.trace != nil {
+		fmt.Fprintln(tx.eng.trace, "Rollback()")
 	}
 
-	_, ok = expect.(Rollback)
-	if !ok {
-		m.t.Errorf("mock: got rollback want %#v", expect)
-		return nil
-	}
+	tx.eng.active = false
 	return nil
 }
 
-type CreateSchema struct {
-	Schema types.SchemaName
-	Fail   bool
-}
-
-func (m *mock) CreateSchema(ctx context.Context, sn types.SchemaName) error {
-	expect, ok := m.next("create schema")
-	if !ok {
-		return nil
+func (tx *transaction) CreateSchema(ctx context.Context, sn types.SchemaName) error {
+	if tx.eng.trace != nil {
+		fmt.Fprintf(tx.eng.trace, "CreateSchema(%s)\n", sn)
 	}
 
-	cs, ok := expect.(CreateSchema)
-	if !ok {
-		m.t.Errorf("mock: got create schema want %#v", expect)
-		return nil
+	if _, ok := tx.eng.schemas[sn]; ok {
+		return fmt.Errorf("engine: create schema: schema already exists: %s", sn)
 	}
-	if sn != cs.Schema {
-		m.t.Errorf("mock: create schema: sn: got %s want %s", sn, cs.Schema)
-	}
-	if cs.Fail {
-		return errors.New("mock: create schema failed")
-	}
+
+	tx.eng.schemas[sn] = struct{}{}
 	return nil
 }
 
-func (m *mock) DropSchema(ctx context.Context, ifExists bool, sn types.SchemaName) error {
-	m.t.Error("mock: got drop schema")
+func (tx *transaction) DropSchema(ctx context.Context, sn types.SchemaName, ifExists bool) error {
+	if tx.eng.trace != nil {
+		fmt.Fprintf(tx.eng.trace, "DropSchema(%s, %v)\n", sn, ifExists)
+	}
+
+	if _, ok := tx.eng.schemas[sn]; !ok {
+		if ifExists {
+			return nil
+		}
+		return fmt.Errorf("engine: drop schema: schema not found: %s", sn)
+	}
+
+	delete(tx.eng.schemas, sn)
 	return nil
 }
 
-func (m *mock) ListSchemas(ctx context.Context, dn types.Identifier) ([]types.Identifier, error) {
-	m.t.Error("mock: got list schemas")
-	return nil, nil
+func (tx *transaction) ListSchemas(ctx context.Context, dn types.Identifier) ([]types.Identifier,
+	error) {
+
+	if tx.eng.trace != nil {
+		fmt.Fprintf(tx.eng.trace, "ListSchemas(%s)\n", dn)
+	}
+
+	var ids []types.Identifier
+	for sn := range tx.eng.schemas {
+		if sn.Database == dn {
+			ids = append(ids, sn.Schema)
+		}
+	}
+	return ids, nil
 }
 
-func (m *mock) LookupTable(ctx context.Context, tn types.TableName) (engine.Table, error) {
-	m.t.Error("mock: got lookup table")
-	return nil, nil
+func (tx *transaction) LookupTable(ctx context.Context, tn types.TableName) (engine.Table, error) {
+	if tx.eng.trace != nil {
+		fmt.Fprintf(tx.eng.trace, "LookupTable(%s)\n", tn)
+	}
+
+	tbl, ok := tx.eng.tables[tn]
+	if !ok {
+		return nil, fmt.Errorf("engine: lookup table: table not found: %s", tn)
+	}
+
+	return tbl, nil
 }
 
-func (m *mock) CreateTable(ctx context.Context, tn types.TableName,
+func (tx *transaction) CreateTable(ctx context.Context, tn types.TableName,
 	colNames []types.Identifier, colTypes []types.ColumnType) error {
 
-	m.t.Error("mock: got create table")
+	if tx.eng.trace != nil {
+		fmt.Fprintf(tx.eng.trace, "CreateTable(%s, %v, %v)\n", tn, colNames, colTypes)
+	}
+
+	if _, ok := tx.eng.tables[tn]; ok {
+		return fmt.Errorf("engine: create table: table already exists: %s", tn)
+	}
+
+	tx.eng.tables[tn] = &table{}
 	return nil
 }
 
-func (m *mock) DropTable(ctx context.Context, tn types.TableName) error {
-	m.t.Error("mock: got drop table")
+func (tx *transaction) DropTable(ctx context.Context, tn types.TableName) error {
+	if tx.eng.trace != nil {
+		fmt.Fprintf(tx.eng.trace, "DropTable(%s)\n", tn)
+	}
+
+	if _, ok := tx.eng.tables[tn]; !ok {
+		return fmt.Errorf("engine: drop table: table not found: %s", tn)
+	}
+
+	delete(tx.eng.tables, tn)
 	return nil
 }
 
-func (m *mock) ListTables(ctx context.Context, sn types.SchemaName) ([]types.Identifier, error) {
-	m.t.Error("mock: got list tables")
-	return nil, nil
+func (tx *transaction) ListTables(ctx context.Context, sn types.SchemaName) ([]types.Identifier,
+	error) {
+
+	if tx.eng.trace != nil {
+		fmt.Fprintf(tx.eng.trace, "ListTables(%s)\n", sn)
+	}
+
+	var ids []types.Identifier
+	for tn := range tx.eng.tables {
+		if tn.Database == sn.Database && tn.Schema == sn.Schema {
+			ids = append(ids, tn.Table)
+		}
+	}
+	return ids, nil
 }
