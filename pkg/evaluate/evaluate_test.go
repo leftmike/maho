@@ -44,15 +44,22 @@ func TestEvaluate(t *testing.T) {
 			stmt:     mustParse("set database = 'test'"),
 			panicked: true,
 		},
+		{
+			stmt:     mustParse("create database db"),
+			panicked: true,
+		},
+		{
+			stmt:     mustParse("drop database db"),
+			panicked: true,
+		},
 	}
 
 	ctx := context.Background()
-	var eng engine.Engine
 	var tx engine.Transaction
 
 	for _, c := range cases {
 		err, panicked := testutil.ErrorPanicked(func() error {
-			return evaluate.Evaluate(ctx, eng, tx, c.stmt)
+			return evaluate.Evaluate(ctx, tx, c.stmt)
 		})
 		if panicked {
 			if !c.panicked {

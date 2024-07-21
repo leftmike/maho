@@ -66,6 +66,20 @@ func (ses *Session) Evaluate(ctx context.Context, stmt sql.Stmt) error {
 		err := ses.tx.Commit(ctx)
 		ses.tx = nil
 		return err
+	case *sql.CreateDatabase:
+		if ses.tx != nil {
+			return fmt.Errorf(
+				"execute: create database: session %d must not have active transaction", ses.id)
+		}
+
+		return ses.eng.CreateDatabase(stmt.Database, stmt.Options)
+	case *sql.DropDatabase:
+		if ses.tx != nil {
+			return fmt.Errorf(
+				"execute: drop database: session %d must not have active transaction", ses.id)
+		}
+
+		return ses.eng.DropDatabase(stmt.Database, stmt.IfExists)
 	case *sql.Rollback:
 		if ses.tx == nil {
 			return fmt.Errorf("execute: rollback: session %d does not have active transaction",
@@ -76,11 +90,19 @@ func (ses *Session) Evaluate(ctx context.Context, stmt sql.Stmt) error {
 		return err
 	case *sql.Set:
 		return ses.set(stmt.Variable, stmt.Value)
-	default:
-		return Evaluate(ctx, ses.eng, ses.tx, stmt)
 	}
 
-	return nil
+	if ses.tx == nil {
+		tx := ses.eng.Begin()
+		err := Evaluate(ctx, tx, stmt)
+		if err != nil {
+			tx.Rollback()
+			return err
+		}
+		return tx.Commit(ctx)
+	}
+
+	return Evaluate(ctx, ses.tx, stmt)
 }
 
 func (ses *Session) set(id types.Identifier, val string) error {
