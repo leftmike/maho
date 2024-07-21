@@ -164,33 +164,33 @@ func (m *mock) CreateSchema(ctx context.Context, sn types.SchemaName) error {
 }
 
 func (m *mock) DropSchema(ctx context.Context, ifExists bool, sn types.SchemaName) error {
-	// XXX
+	m.t.Error("mock: got drop schema")
 	return nil
 }
 
 func (m *mock) ListSchemas(ctx context.Context, dn types.Identifier) ([]types.Identifier, error) {
-	// XXX
+	m.t.Error("mock: got list schemas")
 	return nil, nil
 }
 
 func (m *mock) LookupTable(ctx context.Context, tn types.TableName) (engine.Table, error) {
-	// XXX
+	m.t.Error("mock: got lookup table")
 	return nil, nil
 }
 
 func (m *mock) CreateTable(ctx context.Context, tn types.TableName,
 	colNames []types.Identifier, colTypes []types.ColumnType) error {
 
-	// XXX
+	m.t.Error("mock: got create table")
 	return nil
 }
 
 func (m *mock) DropTable(ctx context.Context, tn types.TableName) error {
-	// XXX
+	m.t.Error("mock: got drop table")
 	return nil
 }
 
 func (m *mock) ListTables(ctx context.Context, sn types.SchemaName) ([]types.Identifier, error) {
-	// XXX
+	m.t.Error("mock: got list tables")
 	return nil, nil
 }

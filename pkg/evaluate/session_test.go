@@ -12,6 +12,24 @@ import (
 	"github.com/leftmike/maho/pkg/types"
 )
 
+type evaluateCase struct {
+	stmt     sql.Stmt
+	panicked bool
+	fail     bool
+	expect   []interface{}
+}
+
+func evaluateExpect(cases []evaluateCase) []interface{} {
+	var expect []interface{}
+	for _, c := range cases {
+		if c.expect != nil {
+			expect = append(expect, c.expect...)
+		}
+	}
+
+	return expect
+}
+
 func TestSessionResolve(t *testing.T) {
 	database := types.ID("maho", false)
 	schema := types.PUBLIC
@@ -63,20 +81,18 @@ func TestSessionResolve(t *testing.T) {
 }
 
 func TestSessionBegin(t *testing.T) {
-	cases := []struct {
-		stmt     sql.Stmt
-		panicked bool
-		fail     bool
-	}{
+	cases := []evaluateCase{
 		{
-			stmt: mustParse("begin"),
+			stmt:   mustParse("begin"),
+			expect: []interface{}{test.Begin{}},
 		},
 		{
 			stmt: mustParse("begin"),
 			fail: true,
 		},
 		{
-			stmt: mustParse("commit"),
+			stmt:   mustParse("commit"),
+			expect: []interface{}{test.Commit{}},
 		},
 		{
 			stmt: mustParse("commit"),
@@ -87,40 +103,41 @@ func TestSessionBegin(t *testing.T) {
 			fail: true,
 		},
 		{
-			stmt: mustParse("begin"),
+			stmt:   mustParse("begin"),
+			expect: []interface{}{test.Begin{}},
 		},
 		{
-			stmt: mustParse("rollback"),
+			stmt:   mustParse("rollback"),
+			expect: []interface{}{test.Rollback{}},
 		},
 		{
 			stmt: mustParse("set database = 'db'"),
 		},
 		{
 			stmt: mustParse("create schema sn"),
+			expect: []interface{}{
+				test.Begin{},
+				test.CreateSchema{
+					Schema: types.SchemaName{types.ID("db", false), types.ID("sn", false)},
+				},
+				test.Commit{},
+			},
 		},
 		{
 			stmt: mustParse("create schema sn"),
 			fail: true,
+			expect: []interface{}{
+				test.Begin{},
+				test.CreateSchema{
+					Schema: types.SchemaName{types.ID("db", false), types.ID("sn", false)},
+					Fail:   true,
+				},
+				test.Rollback{},
+			},
 		},
 	}
 
-	eng := test.NewMockEngine(t, []interface{}{
-		test.Begin{},
-		test.Commit{},
-		test.Begin{},
-		test.Rollback{},
-		test.Begin{},
-		test.CreateSchema{
-			Schema: types.SchemaName{types.ID("db", false), types.ID("sn", false)},
-		},
-		test.Commit{},
-		test.Begin{},
-		test.CreateSchema{
-			Schema: types.SchemaName{types.ID("db", false), types.ID("sn", false)},
-			Fail:   true,
-		},
-		test.Rollback{},
-	})
+	eng := test.NewMockEngine(t, evaluateExpect(cases))
 	ses := evaluate.NewSession(eng, types.ID("maho", false), types.PUBLIC)
 
 	ctx := context.Background()
@@ -145,19 +162,31 @@ func TestSessionBegin(t *testing.T) {
 }
 
 func TestSessionEvaluate(t *testing.T) {
-	cases := []struct {
-		stmt     sql.Stmt
-		panicked bool
-		fail     bool
-	}{
+	cases := []evaluateCase{
 		{
 			stmt: mustParse("create database db with this=123 that 'abcdef'"),
+			expect: []interface{}{
+				test.CreateDatabase{
+					Database: types.ID("db", false),
+					Options: storage.OptionsMap{
+						types.ID("this", false): "123",
+						types.ID("that", false): "abcdef",
+					},
+				},
+			},
 		},
 		{
 			stmt: mustParse("drop database if exists db"),
+			expect: []interface{}{
+				test.DropDatabase{
+					Database: types.ID("db", false),
+					IfExists: true,
+				},
+			},
 		},
 		{
-			stmt: mustParse("begin"),
+			stmt:   mustParse("begin"),
+			expect: []interface{}{test.Begin{}},
 		},
 		{
 			stmt: mustParse("create database db"),
@@ -169,20 +198,7 @@ func TestSessionEvaluate(t *testing.T) {
 		},
 	}
 
-	eng := test.NewMockEngine(t, []interface{}{
-		test.CreateDatabase{
-			Database: types.ID("db", false),
-			Options: storage.OptionsMap{
-				types.ID("this", false): "123",
-				types.ID("that", false): "abcdef",
-			},
-		},
-		test.DropDatabase{
-			Database: types.ID("db", false),
-			IfExists: true,
-		},
-		test.Begin{},
-	})
+	eng := test.NewMockEngine(t, evaluateExpect(cases))
 	ses := evaluate.NewSession(eng, types.ID("maho", false), types.PUBLIC)
 	ctx := context.Background()
 

@@ -8,9 +8,11 @@ import (
 
 	"github.com/leftmike/maho/pkg/engine"
 	"github.com/leftmike/maho/pkg/evaluate"
+	"github.com/leftmike/maho/pkg/evaluate/test"
 	"github.com/leftmike/maho/pkg/parser"
 	"github.com/leftmike/maho/pkg/parser/sql"
 	"github.com/leftmike/maho/pkg/testutil"
+	"github.com/leftmike/maho/pkg/types"
 )
 
 func mustParse(s string) sql.Stmt {
@@ -22,7 +24,7 @@ func mustParse(s string) sql.Stmt {
 	return stmt
 }
 
-func TestEvaluate(t *testing.T) {
+func TestEvaluatePanic(t *testing.T) {
 	cases := []struct {
 		stmt     sql.Stmt
 		panicked bool
@@ -68,6 +70,36 @@ func TestEvaluate(t *testing.T) {
 		} else if c.panicked {
 			t.Errorf("Evaluate(%s) did not panic", c.stmt)
 		} else if err != nil {
+			if !c.fail {
+				t.Errorf("Evaluate(%s) failed with %s", c.stmt, err)
+			}
+		} else if c.fail {
+			t.Errorf("Evaluate(%s) did not fail", c.stmt)
+		}
+	}
+}
+
+func TestEvaluate(t *testing.T) {
+	cases := []evaluateCase{
+		{
+			stmt: mustParse("create schema sn"),
+			expect: []interface{}{
+				test.CreateSchema{
+					Schema: types.SchemaName{types.ID("db", false), types.ID("sn", false)},
+				},
+			},
+		},
+	}
+
+	tx := test.NewMockTransaction(t, evaluateExpect(cases))
+	ses := evaluate.NewSession(nil, types.ID("db", false), types.ID("sn", false))
+
+	ctx := context.Background()
+	for _, c := range cases {
+		c.stmt.Resolve(ses)
+
+		err := evaluate.Evaluate(ctx, tx, c.stmt)
+		if err != nil {
 			if !c.fail {
 				t.Errorf("Evaluate(%s) failed with %s", c.stmt, err)
 			}
