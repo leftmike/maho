@@ -140,7 +140,7 @@ func TestTable(t *testing.T) {
 		t.Errorf("CreateSchema(%s) failed with %s", schema, err)
 	}
 
-	err = tx.CreateTable(ctx, table1, nil, nil)
+	err = tx.CreateTable(ctx, table1, nil, nil, nil)
 	if err != nil {
 		t.Errorf("CreateTable(%s) failed with %s", table1, err)
 	}
@@ -148,11 +148,11 @@ func TestTable(t *testing.T) {
 	if err != nil {
 		t.Errorf("LookupTable(%s) failed with %s", table1, err)
 	}
-	err = tx.CreateTable(ctx, table1, nil, nil)
+	err = tx.CreateTable(ctx, table1, nil, nil, nil)
 	if err == nil {
 		t.Errorf("CreateTable(%s) did not fail", table1)
 	}
-	err = tx.CreateTable(ctx, table2, nil, nil)
+	err = tx.CreateTable(ctx, table2, nil, nil, nil)
 	if err != nil {
 		t.Errorf("CreateTable(%s) failed with %s", table2, err)
 	}
@@ -172,7 +172,7 @@ func TestTable(t *testing.T) {
 	if err == nil {
 		t.Errorf("LookupTable(%s) did not fail", table1)
 	}
-	err = tx.CreateTable(ctx, table1, nil, nil)
+	err = tx.CreateTable(ctx, table1, nil, nil, nil)
 	if err != nil {
 		t.Errorf("CreateTable(%s) failed with %s", table1, err)
 	}
@@ -182,7 +182,7 @@ func TestTable(t *testing.T) {
 	}
 
 	tn := types.TableName{database2, types.ID("scm", false), types.ID("tbl1", false)}
-	err = tx.CreateTable(ctx, tn, nil, nil)
+	err = tx.CreateTable(ctx, tn, nil, nil, nil)
 	if err != nil {
 		t.Errorf("CreateTable(%s) failed with %s", tn, err)
 	}

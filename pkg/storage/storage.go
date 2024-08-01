@@ -59,14 +59,15 @@ type RowId interface{}
 
 type Table interface {
 	TID() TableId
-	Version() uint32
 	Name() types.TableName
+
+	Version() uint32
 	ColumnNames() []types.Identifier
 	ColumnTypes() []types.ColumnType
-	Primary() []types.ColumnKey
+	Key() []types.ColumnKey
 
 	// XXX: AddColumn, DropColumn, UpdateColumn
-	// XXX: AddIndex, RemoveIndex
+	// XXX: CreateIndex, DropIndex
 
 	Rows(ctx context.Context, cols []types.ColumnNum, minRow, maxRow types.Row,
 		pred Predicate) (Rows, error)

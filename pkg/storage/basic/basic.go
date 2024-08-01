@@ -34,7 +34,7 @@ type tableType struct {
 	Name        types.TableName
 	ColumnNames []types.Identifier
 	ColumnTypes []types.ColumnType
-	Primary     []types.ColumnKey
+	Key         []types.ColumnKey
 	HasPrimary  bool
 }
 
@@ -160,7 +160,7 @@ func (tx *transaction) CreateTable(ctx context.Context, tid storage.TableId, tn 
 		Name:        tn,
 		ColumnNames: colNames,
 		ColumnTypes: colTypes,
-		Primary:     primary,
+		Key:         primary,
 		HasPrimary:  hasPrimary,
 	})
 	return nil
@@ -221,12 +221,12 @@ func (tbl *table) TID() storage.TableId {
 	return tbl.tid
 }
 
-func (tbl *table) Version() uint32 {
-	return tbl.tt.Version
-}
-
 func (tbl *table) Name() types.TableName {
 	return tbl.tt.Name
+}
+
+func (tbl *table) Version() uint32 {
+	return tbl.tt.Version
 }
 
 func (tbl *table) ColumnNames() []types.Identifier {
@@ -237,8 +237,8 @@ func (tbl *table) ColumnTypes() []types.ColumnType {
 	return tbl.tt.ColumnTypes
 }
 
-func (tbl *table) Primary() []types.ColumnKey {
-	return tbl.tt.Primary
+func (tbl *table) Key() []types.ColumnKey {
+	return tbl.tt.Key
 }
 
 func predicateFunction(pred storage.Predicate, ct types.ColumnType) func(types.Value) bool {
@@ -284,7 +284,7 @@ func (tbl *table) Rows(ctx context.Context, cols []types.ColumnNum, minRow, maxR
 
 	var maxItem item
 	if maxRow != nil {
-		maxItem = rowToItem(rel, tbl.tt.Primary, maxRow)
+		maxItem = rowToItem(rel, tbl.tt.Key, maxRow)
 	}
 
 	var predFn func(types.Value) bool
@@ -295,7 +295,7 @@ func (tbl *table) Rows(ctx context.Context, cols []types.ColumnNum, minRow, maxR
 	}
 
 	var items []item
-	tbl.tx.tree.AscendGreaterOrEqual(rowToItem(rel, tbl.tt.Primary, minRow),
+	tbl.tx.tree.AscendGreaterOrEqual(rowToItem(rel, tbl.tt.Key, minRow),
 		func(it item) bool {
 			if it.rel != rel {
 				return false
@@ -339,7 +339,7 @@ func (tbl *table) Update(ctx context.Context, rid storage.RowId, cols []types.Co
 
 	tbl.tx.forWrite()
 
-	if types.ColumnKeyUpdated(tbl.tt.Primary, cols) {
+	if types.ColumnKeyUpdated(tbl.tt.Key, cols) {
 		err := tbl.Delete(ctx, rid)
 		if err != nil {
 			return err
@@ -350,7 +350,7 @@ func (tbl *table) Update(ctx context.Context, rid storage.RowId, cols []types.Co
 		}
 	} else {
 		tbl.tx.tree.ReplaceOrInsert(
-			rowToItem(toRelationId(tbl.tid, primaryIndexId), tbl.tt.Primary, row))
+			rowToItem(toRelationId(tbl.tid, primaryIndexId), tbl.tt.Key, row))
 	}
 
 	return nil
@@ -377,7 +377,7 @@ func (tbl *table) Insert(ctx context.Context, rows []types.Row) error {
 			return err
 		}
 
-		it := rowToItem(rel, tbl.tt.Primary, row)
+		it := rowToItem(rel, tbl.tt.Key, row)
 		if tbl.tx.tree.Has(it) {
 			return fmt.Errorf("basic: %s: primary index: existing row with duplicate key: %s",
 				tbl.tt.Name, row)

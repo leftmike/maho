@@ -48,7 +48,7 @@ func TestCreateTable(t *testing.T, store string, newStore NewStore) {
 			ver:      1,
 			colNames: colNames1,
 			colTypes: colTypes1,
-			primary:  primary1,
+			key:      primary1,
 		},
 		Commit{},
 	})
@@ -62,7 +62,7 @@ func TestCreateTable(t *testing.T, store string, newStore NewStore) {
 			ver:      1,
 			colNames: colNames1,
 			colTypes: colTypes1,
-			primary:  primary1,
+			key:      primary1,
 		},
 		Rollback{},
 	})
@@ -93,7 +93,7 @@ func TestCreateTable(t *testing.T, store string, newStore NewStore) {
 			ver:      1,
 			colNames: colNames1,
 			colTypes: colTypes1,
-			primary:  primary1,
+			key:      primary1,
 		},
 		Rollback{},
 	})
@@ -117,7 +117,7 @@ func TestCreateTable(t *testing.T, store string, newStore NewStore) {
 			ver:      1,
 			colNames: colNames1,
 			colTypes: colTypes1,
-			primary:  primary1,
+			key:      primary1,
 		},
 		OpenTable{
 			tid: storage.EngineTableId + 2,
@@ -127,7 +127,7 @@ func TestCreateTable(t *testing.T, store string, newStore NewStore) {
 			ver:      1,
 			colNames: colNames2,
 			colTypes: colTypes2,
-			primary:  primary2,
+			key:      primary2,
 		},
 		Rollback{},
 	})

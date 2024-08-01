@@ -6,6 +6,7 @@ import (
 
 	"github.com/leftmike/maho/pkg/engine"
 	"github.com/leftmike/maho/pkg/parser/sql"
+	"github.com/leftmike/maho/pkg/types"
 )
 
 func Evaluate(ctx context.Context, tx engine.Transaction, stmt sql.Stmt) error {
@@ -35,12 +36,52 @@ func Evaluate(ctx context.Context, tx engine.Transaction, stmt sql.Stmt) error {
 	panic(fmt.Sprintf("evaluate: unexpected stmt: %#v", stmt))
 }
 
-func EvaluateCreateTable(ctx context.Context, tx engine.Transaction,
-	stmt *sql.CreateTable) error {
+func columnNumber(nam types.Identifier, colNames []types.Identifier) (types.ColumnNum, bool) {
+	for num, col := range colNames {
+		if nam == col {
+			return types.ColumnNum(num), true
+		}
+	}
+	return 0, false
+}
 
-	err := tx.CreateTable(ctx, stmt.Table, stmt.Columns, stmt.ColumnTypes)
+func indexKeyToColumnKey(ik sql.IndexKey, colNames []types.Identifier) ([]types.ColumnKey,
+	types.Identifier) {
+
+	var key []types.ColumnKey
+	for cdx, col := range ik.Columns {
+		num, ok := columnNumber(col, colNames)
+		if !ok {
+			return nil, col
+		}
+		key = append(key, types.MakeColumnKey(num, ik.Reverse[cdx]))
+	}
+
+	return key, 0
+}
+
+func EvaluateCreateTable(ctx context.Context, tx engine.Transaction, stmt *sql.CreateTable) error {
+	if stmt.IfNotExists {
+		_, err := tx.LookupTable(ctx, stmt.Table)
+		if err == nil {
+			return nil
+		}
+	}
+
+	var primary []types.ColumnKey
+	for _, con := range stmt.Constraints {
+		if con.Type == sql.PrimaryConstraint {
+			var col types.Identifier
+			primary, col = indexKeyToColumnKey(con.Key, stmt.Columns)
+			if col != 0 {
+				return fmt.Errorf("evaluate: create table: %s: primary key: unknown column: %s",
+					stmt.Table, col)
+			}
+		}
+	}
+
+	err := tx.CreateTable(ctx, stmt.Table, stmt.Columns, stmt.ColumnTypes, primary)
 	// XXX:	ColumnDefaults
-	// XXX: IfNotExists
 	// XXX: Constraints
 	// XXX: ForeignKeys
 	return err

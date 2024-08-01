@@ -99,7 +99,7 @@ type TableType struct {
 	ver      uint32
 	colNames []types.Identifier
 	colTypes []types.ColumnType
-	primary  []types.ColumnKey
+	key      []types.ColumnKey
 }
 
 type Commit struct {
@@ -279,7 +279,7 @@ func testStorage(t *testing.T, tx storage.Transaction, tbl storage.Table,
 
 			cn := tbl.ColumnNames()
 			ct := tbl.ColumnTypes()
-			if c.primary == nil {
+			if c.key == nil {
 				for {
 					if len(cn) == 0 || cn[0] != 0 {
 						break
@@ -296,10 +296,10 @@ func testStorage(t *testing.T, tx storage.Transaction, tbl storage.Table,
 			if !reflect.DeepEqual(ct, c.colTypes) {
 				t.Errorf("%d.ColumnTypes() got %#v want %#v", c.tid, ct, c.colTypes)
 			}
-			if c.primary != nil {
-				p := tbl.Primary()
-				if !reflect.DeepEqual(p, c.primary) {
-					t.Errorf("%d.Primary() got %#v want %#v", c.tid, p, c.primary)
+			if c.key != nil {
+				key := tbl.Key()
+				if !reflect.DeepEqual(key, c.key) {
+					t.Errorf("%d.Key() got %#v want %#v", c.tid, key, c.key)
 				}
 			}
 		case Commit:

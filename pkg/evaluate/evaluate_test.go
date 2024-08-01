@@ -86,6 +86,30 @@ func TestEvaluate(t *testing.T) {
 			stmt:  mustParse("create schema sn"),
 			trace: "CreateSchema(db.sn)",
 		},
+		{
+			stmt:  mustParse("create table t1 (c1 int, c2 bool)"),
+			trace: "CreateTable(db.sn.t1, [c1 c2], [INT BOOL], [])",
+		},
+		{
+			stmt: mustParse("create table t1 (c1 int, c2 bool)"),
+			fail: true,
+		},
+		{
+			stmt:  mustParse("create table t2 (c1 int primary key, c2 bool)"),
+			trace: "CreateTable(db.sn.t2, [c1 c2], [INT BOOL], [1])",
+		},
+		{
+			stmt:  mustParse("create table t3 (c1 int, c2 bool, primary key(c2, c1))"),
+			trace: "CreateTable(db.sn.t3, [c1 c2], [INT BOOL], [2 1])",
+		},
+		{
+			stmt:  mustParse("create table t4 (c1 int, c2 bool, primary key(c2, c1 desc))"),
+			trace: "CreateTable(db.sn.t4, [c1 c2], [INT BOOL], [2 -1])",
+		},
+		{
+			stmt: mustParse("create table tf (c1 int, c2 bool, primary key(c2, c3))"),
+			fail: true,
+		},
 	}
 
 	var buf bytes.Buffer

@@ -11,6 +11,13 @@ import (
 
 /*
 - add pkg/plan
+-- https://www.scattered-thoughts.net/writing/materialize-decorrelation
+-- https://github.com/cockroachdb/cockroach/tree/master/pkg/sql/opt/ops
+-- https://github.com/cockroachdb/cockroach/tree/master/pkg/sql/opt/optgen
+-- https://github.com/cockroachdb/cockroach/tree/master/pkg/sql/opt/memo
+-- https://github.com/cockroachdb/cockroach/tree/master/pkg/sql/opt/norm/rules
+
+- https://pkg.go.dev/github.com/google/btree
 */
 
 func main() {

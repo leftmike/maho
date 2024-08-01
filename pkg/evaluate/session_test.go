@@ -125,7 +125,6 @@ Commit()`,
 			stmt: mustParse("create schema sn"),
 			fail: true,
 			trace: `Begin()
-CreateSchema(db.sn)
 Rollback()`,
 		},
 	}

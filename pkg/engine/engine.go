@@ -21,23 +21,42 @@ type Transaction interface {
 	DropSchema(ctx context.Context, sn types.SchemaName, ifExists bool) error
 	ListSchemas(ctx context.Context, dn types.Identifier) ([]types.Identifier, error)
 
+	// XXX: LookupTable -> OpenTable
 	LookupTable(ctx context.Context, tn types.TableName) (Table, error)
 	CreateTable(ctx context.Context, tn types.TableName, colNames []types.Identifier,
-		colTypes []types.ColumnType) error
+		colTypes []types.ColumnType, primary []types.ColumnKey) error
 	DropTable(ctx context.Context, tn types.TableName) error
 	ListTables(ctx context.Context, sn types.SchemaName) ([]types.Identifier, error)
 }
 
 type Table interface {
+	Name() types.TableName
+	Type() TableType
 	// XXX
+}
+
+type RelationType interface {
+	ColumnNames() []types.Identifier
+	ColumnTypes() []types.ColumnType
+	Key() []types.ColumnKey
+}
+
+type TableType interface {
+	Version() uint32
+	RelationType
+	Indexes() []IndexType
+}
+
+type IndexType interface {
+	Name() types.Identifier
+	RelationType
 }
 
 type engine struct {
 	st storage.Store
 }
 
-type transaction struct {
-}
+type transaction struct{}
 
 func NewEngine(st storage.Store) Engine {
 	return &engine{
@@ -93,7 +112,7 @@ func (tx *transaction) LookupTable(ctx context.Context, tn types.TableName) (Tab
 }
 
 func (tx *transaction) CreateTable(ctx context.Context, tn types.TableName,
-	colNames []types.Identifier, colTypes []types.ColumnType) error {
+	colNames []types.Identifier, colTypes []types.ColumnType, primary []types.ColumnKey) error {
 
 	// XXX
 	return nil
