@@ -17,12 +17,16 @@ func Evaluate(ctx context.Context, tx engine.Transaction, stmt sql.Stmt) error {
 		panic("evaluate: commit unexpected")
 	case *sql.CreateDatabase:
 		panic("evaluate: create database unexpected")
+	case *sql.CreateIndex:
+		return EvaluateCreateIndex(ctx, tx, stmt)
 	case *sql.CreateSchema:
 		return tx.CreateSchema(ctx, stmt.Schema)
 	case *sql.CreateTable:
 		return EvaluateCreateTable(ctx, tx, stmt)
 	case *sql.DropDatabase:
 		panic("evaluate: drop database unexpected")
+	case *sql.DropIndex:
+		return EvaluateDropIndex(ctx, tx, stmt)
 	case *sql.DropSchema:
 		return tx.DropSchema(ctx, stmt.Schema, stmt.IfExists)
 	case *sql.DropTable:
@@ -60,12 +64,38 @@ func indexKeyToColumnKey(ik sql.IndexKey, colNames []types.Identifier) ([]types.
 	return key, 0
 }
 
+func EvaluateCreateIndex(ctx context.Context, tx engine.Transaction, stmt *sql.CreateIndex) error {
+	tbl, err := tx.OpenTable(ctx, stmt.Table)
+	if err != nil {
+		return err
+	}
+
+	tt := tbl.Type()
+	for _, it := range tt.Indexes() {
+		if it.Name() == stmt.Index {
+			if stmt.IfNotExists {
+				return nil
+			}
+			return fmt.Errorf("evaluate: create index: index already exists: %s: %s", stmt.Table,
+				stmt.Index)
+		}
+	}
+
+	key, col := indexKeyToColumnKey(stmt.Key, tt.ColumnNames())
+	if col != 0 {
+		return fmt.Errorf("evaluate: create index: %s: %s: key: unknown column: %s",
+			stmt.Table, stmt.Index, col)
+	}
+
+	return tx.CreateIndex(ctx, stmt.Table, stmt.Index, key)
+}
+
 func EvaluateCreateTable(ctx context.Context, tx engine.Transaction, stmt *sql.CreateTable) error {
-	if stmt.IfNotExists {
-		_, err := tx.LookupTable(ctx, stmt.Table)
-		if err == nil {
+	if _, err := tx.OpenTable(ctx, stmt.Table); err == nil {
+		if stmt.IfNotExists {
 			return nil
 		}
+		return fmt.Errorf("evaluate: create table: table already exists: %s", stmt.Table)
 	}
 
 	var primary []types.ColumnKey
@@ -77,6 +107,7 @@ func EvaluateCreateTable(ctx context.Context, tx engine.Transaction, stmt *sql.C
 				return fmt.Errorf("evaluate: create table: %s: primary key: unknown column: %s",
 					stmt.Table, col)
 			}
+			break
 		}
 	}
 
@@ -85,6 +116,13 @@ func EvaluateCreateTable(ctx context.Context, tx engine.Transaction, stmt *sql.C
 	// XXX: Constraints
 	// XXX: ForeignKeys
 	return err
+}
+
+func EvaluateDropIndex(ctx context.Context, tx engine.Transaction,
+	stmt *sql.DropIndex) error {
+
+	// XXX: IfExists
+	return tx.DropIndex(ctx, stmt.Table, stmt.Index)
 }
 
 func EvaluateDropTable(ctx context.Context, tx engine.Transaction,

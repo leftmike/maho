@@ -91,8 +91,9 @@ func TestEvaluate(t *testing.T) {
 			trace: "CreateTable(db.sn.t1, [c1 c2], [INT BOOL], [])",
 		},
 		{
-			stmt: mustParse("create table t1 (c1 int, c2 bool)"),
-			fail: true,
+			stmt:  mustParse("create table t1 (c1 int, c2 bool)"),
+			trace: "OpenTable(db.sn.t1)",
+			fail:  true,
 		},
 		{
 			stmt:  mustParse("create table t2 (c1 int primary key, c2 bool)"),

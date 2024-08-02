@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 
+	"github.com/leftmike/maho/pkg/parser/sql"
 	"github.com/leftmike/maho/pkg/storage"
 	"github.com/leftmike/maho/pkg/types"
 )
@@ -21,12 +22,15 @@ type Transaction interface {
 	DropSchema(ctx context.Context, sn types.SchemaName, ifExists bool) error
 	ListSchemas(ctx context.Context, dn types.Identifier) ([]types.Identifier, error)
 
-	// XXX: LookupTable -> OpenTable
-	LookupTable(ctx context.Context, tn types.TableName) (Table, error)
+	OpenTable(ctx context.Context, tn types.TableName) (Table, error)
 	CreateTable(ctx context.Context, tn types.TableName, colNames []types.Identifier,
 		colTypes []types.ColumnType, primary []types.ColumnKey) error
 	DropTable(ctx context.Context, tn types.TableName) error
 	ListTables(ctx context.Context, sn types.SchemaName) ([]types.Identifier, error)
+
+	CreateIndex(ctx context.Context, tn types.TableName, in types.Identifier,
+		key []types.ColumnKey) error
+	DropIndex(ctx context.Context, tn types.TableName, in types.Identifier) error
 }
 
 type Table interface {
@@ -35,21 +39,18 @@ type Table interface {
 	// XXX
 }
 
-type RelationType interface {
+type TableType interface {
+	Version() uint32
 	ColumnNames() []types.Identifier
 	ColumnTypes() []types.ColumnType
 	Key() []types.ColumnKey
-}
-
-type TableType interface {
-	Version() uint32
-	RelationType
+	ColumnDefaults() sql.Expr
 	Indexes() []IndexType
 }
 
 type IndexType interface {
 	Name() types.Identifier
-	RelationType
+	Key() []types.ColumnKey
 }
 
 type engine struct {
@@ -106,7 +107,7 @@ func (tx *transaction) ListSchemas(ctx context.Context, dn types.Identifier) ([]
 	return nil, nil
 }
 
-func (tx *transaction) LookupTable(ctx context.Context, tn types.TableName) (Table, error) {
+func (tx *transaction) OpenTable(ctx context.Context, tn types.TableName) (Table, error) {
 	// XXX
 	return nil, nil
 }
@@ -128,4 +129,18 @@ func (tx *transaction) ListTables(ctx context.Context, sn types.SchemaName) ([]t
 
 	// XXX
 	return nil, nil
+}
+
+func (tx *transaction) CreateIndex(ctx context.Context, tn types.TableName, in types.Identifier,
+	key []types.ColumnKey) error {
+
+	// XXX
+	return nil
+}
+
+func (tx *transaction) DropIndex(ctx context.Context, tn types.TableName,
+	in types.Identifier) error {
+
+	// XXX
+	return nil
 }

@@ -2,10 +2,13 @@ package test_test
 
 import (
 	"context"
+	"reflect"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
 
+	"github.com/leftmike/maho/pkg/engine"
 	"github.com/leftmike/maho/pkg/evaluate/test"
 	"github.com/leftmike/maho/pkg/types"
 )
@@ -21,6 +24,16 @@ var (
 	table1    = types.TableName{database, types.ID("scm", false), types.ID("tbl1", false)}
 	table2    = types.TableName{database, types.ID("scm", false), types.ID("tbl2", false)}
 	table3    = types.TableName{database, types.ID("scm", false), types.ID("tbl3", false)}
+	index1    = types.ID("idx1", false)
+	index2    = types.ID("idx2", false)
+	colNames  = []types.Identifier{
+		types.ID("c1", false),
+		types.ID("c2", false),
+		types.ID("c3", false),
+	}
+	colTypes = []types.ColumnType{types.Int64ColType, types.Int64ColType, types.Int64ColType}
+	primary  = []types.ColumnKey{types.MakeColumnKey(0, false)}
+	key      = []types.ColumnKey{types.MakeColumnKey(1, false)}
 )
 
 func TestDatabase(t *testing.T) {
@@ -140,25 +153,25 @@ func TestTable(t *testing.T) {
 		t.Errorf("CreateSchema(%s) failed with %s", schema, err)
 	}
 
-	err = tx.CreateTable(ctx, table1, nil, nil, nil)
+	err = tx.CreateTable(ctx, table1, colNames, colTypes, primary)
 	if err != nil {
 		t.Errorf("CreateTable(%s) failed with %s", table1, err)
 	}
-	_, err = tx.LookupTable(ctx, table1)
+	_, err = tx.OpenTable(ctx, table1)
 	if err != nil {
-		t.Errorf("LookupTable(%s) failed with %s", table1, err)
+		t.Errorf("OpenTable(%s) failed with %s", table1, err)
 	}
-	err = tx.CreateTable(ctx, table1, nil, nil, nil)
+	err = tx.CreateTable(ctx, table1, colNames, colTypes, primary)
 	if err == nil {
 		t.Errorf("CreateTable(%s) did not fail", table1)
 	}
-	err = tx.CreateTable(ctx, table2, nil, nil, nil)
+	err = tx.CreateTable(ctx, table2, colNames, colTypes, primary)
 	if err != nil {
 		t.Errorf("CreateTable(%s) failed with %s", table2, err)
 	}
-	_, err = tx.LookupTable(ctx, table2)
+	_, err = tx.OpenTable(ctx, table2)
 	if err != nil {
-		t.Errorf("LookupTable(%s) failed with %s", table1, err)
+		t.Errorf("OpenTable(%s) failed with %s", table2, err)
 	}
 	err = tx.DropTable(ctx, table1)
 	if err != nil {
@@ -168,21 +181,21 @@ func TestTable(t *testing.T) {
 	if err == nil {
 		t.Errorf("DropTable(%s) did not fail", table1)
 	}
-	_, err = tx.LookupTable(ctx, table1)
+	_, err = tx.OpenTable(ctx, table1)
 	if err == nil {
-		t.Errorf("LookupTable(%s) did not fail", table1)
+		t.Errorf("OpenTable(%s) did not fail", table1)
 	}
-	err = tx.CreateTable(ctx, table1, nil, nil, nil)
+	err = tx.CreateTable(ctx, table1, colNames, colTypes, primary)
 	if err != nil {
 		t.Errorf("CreateTable(%s) failed with %s", table1, err)
 	}
-	_, err = tx.LookupTable(ctx, table1)
+	_, err = tx.OpenTable(ctx, table1)
 	if err != nil {
-		t.Errorf("LookupTable(%s) failed with %s", table1, err)
+		t.Errorf("OpenTable(%s) failed with %s", table1, err)
 	}
 
 	tn := types.TableName{database2, types.ID("scm", false), types.ID("tbl1", false)}
-	err = tx.CreateTable(ctx, tn, nil, nil, nil)
+	err = tx.CreateTable(ctx, tn, colNames, colTypes, primary)
 	if err != nil {
 		t.Errorf("CreateTable(%s) failed with %s", tn, err)
 	}
@@ -197,4 +210,77 @@ func TestTable(t *testing.T) {
 			t.Errorf("ListTables(%s) got %s want %s", schema, got, want)
 		}
 	}
+}
+
+func checkIndex(t *testing.T, tx engine.Transaction, tn types.TableName, ids []types.Identifier) {
+	ctx := context.Background()
+
+	tbl, err := tx.OpenTable(ctx, tn)
+	if err != nil {
+		t.Errorf("OpenTable(%s) failed with %s", tn, err)
+	}
+	tt := tbl.Type()
+	indexes := tt.Indexes()
+	if len(indexes) != len(ids) {
+		t.Errorf("TableType(%s).Indexes() got %d want %d", tn, len(indexes), len(ids))
+	} else {
+		for _, idx := range indexes {
+			if !slices.Contains(ids, idx.Name()) {
+				t.Errorf("TableType(%s).Indexes()[0].Name() got %s want %v", tn, idx.Name(), ids)
+			}
+			if !reflect.DeepEqual(idx.Key(), key) {
+				t.Errorf("TableType(%s).Indexes().Key() got %v want %v", tn, idx.Key(), key)
+			}
+		}
+	}
+}
+
+func TestIndex(t *testing.T) {
+	eng := test.NewEngine(nil)
+
+	err := eng.CreateDatabase(database, nil)
+	if err != nil {
+		t.Errorf("CreateDatabase(%s) failed with %s", database, err)
+	}
+
+	tx := eng.Begin()
+	ctx := context.Background()
+
+	err = tx.CreateSchema(ctx, schema)
+	if err != nil {
+		t.Errorf("CreateSchema(%s) failed with %s", schema, err)
+	}
+
+	err = tx.CreateTable(ctx, table1, colNames, colTypes, primary)
+	if err != nil {
+		t.Errorf("CreateTable(%s) failed with %s", table1, err)
+	}
+
+	err = tx.CreateIndex(ctx, table1, index1, key)
+	if err != nil {
+		t.Errorf("CreateIndex(%s, %s) failed with %s", table1, index1, err)
+	}
+	err = tx.CreateIndex(ctx, table1, index1, key)
+	if err == nil {
+		t.Errorf("CreateIndex(%s, %s) did not fail", table1, index1)
+	}
+	checkIndex(t, tx, table1, []types.Identifier{index1})
+
+	err = tx.CreateIndex(ctx, table1, index2, key)
+	if err != nil {
+		t.Errorf("CreateIndex(%s, %s) failed with %s", table1, index2, err)
+	}
+	checkIndex(t, tx, table1, []types.Identifier{index1, index2})
+
+	err = tx.DropIndex(ctx, table1, index1)
+	if err != nil {
+		t.Errorf("DropIndex(%s, %s) failed with %s", table1, index1, err)
+	}
+	checkIndex(t, tx, table1, []types.Identifier{index2})
+
+	err = tx.DropIndex(ctx, table1, index2)
+	if err != nil {
+		t.Errorf("DropIndex(%s, %s) failed with %s", table1, index2, err)
+	}
+	checkIndex(t, tx, table1, nil)
 }

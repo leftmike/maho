@@ -7,6 +7,7 @@ import (
 	"slices"
 
 	"github.com/leftmike/maho/pkg/engine"
+	"github.com/leftmike/maho/pkg/parser/sql"
 	"github.com/leftmike/maho/pkg/storage"
 	"github.com/leftmike/maho/pkg/types"
 )
@@ -29,6 +30,12 @@ type tableType struct {
 	colNames []types.Identifier
 	colTypes []types.ColumnType
 	primary  []types.ColumnKey
+	indexes  map[types.Identifier]*indexType
+}
+
+type indexType struct {
+	name types.Identifier
+	key  []types.ColumnKey
 }
 
 type transaction struct {
@@ -153,14 +160,14 @@ func (tx *transaction) ListSchemas(ctx context.Context, dn types.Identifier) ([]
 	return ids, nil
 }
 
-func (tx *transaction) LookupTable(ctx context.Context, tn types.TableName) (engine.Table, error) {
+func (tx *transaction) OpenTable(ctx context.Context, tn types.TableName) (engine.Table, error) {
 	tbl, ok := tx.eng.tables[tn]
 	if !ok {
 		return nil, fmt.Errorf("engine: lookup table: table not found: %s", tn)
 	}
 
 	if tx.eng.trace != nil {
-		fmt.Fprintf(tx.eng.trace, "LookupTable(%s)\n", tn)
+		fmt.Fprintf(tx.eng.trace, "OpenTable(%s)\n", tn)
 	}
 
 	return tbl, nil
@@ -184,6 +191,7 @@ func (tx *transaction) CreateTable(ctx context.Context, tn types.TableName,
 			colNames: slices.Clone(colNames),
 			colTypes: slices.Clone(colTypes),
 			primary:  slices.Clone(primary),
+			indexes:  map[types.Identifier]*indexType{},
 		},
 	}
 	return nil
@@ -219,6 +227,49 @@ func (tx *transaction) ListTables(ctx context.Context, sn types.SchemaName) ([]t
 	return ids, nil
 }
 
+func (tx *transaction) CreateIndex(ctx context.Context, tn types.TableName, in types.Identifier,
+	key []types.ColumnKey) error {
+
+	tbl, ok := tx.eng.tables[tn]
+	if !ok {
+		return fmt.Errorf("engine: create index: table not found: %s", tn)
+	}
+
+	if _, ok := tbl.tableType.indexes[in]; ok {
+		return fmt.Errorf("engine: create index: index already exists: %s: %s", tn, in)
+	}
+
+	if tx.eng.trace != nil {
+		fmt.Fprintf(tx.eng.trace, "CreateIndex(%s, %s, %v)\n", tn, in, key)
+	}
+
+	tbl.tableType.indexes[in] = &indexType{
+		name: in,
+		key:  key,
+	}
+	return nil
+}
+
+func (tx *transaction) DropIndex(ctx context.Context, tn types.TableName,
+	in types.Identifier) error {
+
+	tbl, ok := tx.eng.tables[tn]
+	if !ok {
+		return fmt.Errorf("engine: drop index: table not found: %s", tn)
+	}
+
+	if _, ok := tbl.tableType.indexes[in]; !ok {
+		return fmt.Errorf("engine: drop index: index not found: %s: %s", tn, in)
+	}
+
+	if tx.eng.trace != nil {
+		fmt.Fprintf(tx.eng.trace, "DropIndex(%s, %s)\n", tn, in)
+	}
+
+	delete(tbl.tableType.indexes, in)
+	return nil
+}
+
 func (tbl *table) Name() types.TableName {
 	return tbl.name
 }
@@ -243,6 +294,23 @@ func (tt *tableType) Key() []types.ColumnKey {
 	return tt.primary
 }
 
+func (tt *tableType) ColumnDefaults() sql.Expr {
+	return nil // XXX
+}
+
 func (tt *tableType) Indexes() []engine.IndexType {
-	return nil
+	indexes := make([]engine.IndexType, 0, len(tt.indexes))
+	for _, it := range tt.indexes {
+		indexes = append(indexes, it)
+	}
+
+	return indexes
+}
+
+func (it *indexType) Name() types.Identifier {
+	return it.name
+}
+
+func (it *indexType) Key() []types.ColumnKey {
+	return it.key
 }
