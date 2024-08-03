@@ -3,13 +3,16 @@ package evaluate_test
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"strings"
 	"testing"
 
+	"github.com/leftmike/maho/pkg/engine"
 	"github.com/leftmike/maho/pkg/evaluate"
-	"github.com/leftmike/maho/pkg/evaluate/test"
 	"github.com/leftmike/maho/pkg/parser/sql"
+	"github.com/leftmike/maho/pkg/storage"
 	"github.com/leftmike/maho/pkg/testutil"
 	"github.com/leftmike/maho/pkg/types"
 )
@@ -19,6 +22,7 @@ type evaluateCase struct {
 	panicked bool
 	fail     bool
 	trace    string
+	fn       func()
 }
 
 func evaluateTrace(cases []evaluateCase) string {
@@ -36,7 +40,11 @@ func TestSessionResolve(t *testing.T) {
 	database := types.ID("maho", false)
 	schema := types.PUBLIC
 
-	ses := evaluate.NewSession(test.NewEngine(nil), database, schema)
+	var buf bytes.Buffer
+	eng := sesEngine{
+		trace: &buf,
+	}
+	ses := evaluate.NewSession(eng, database, schema)
 
 	tn := types.TableName{Table: types.ID("tbl", false)}
 	rtn := types.TableName{
@@ -122,15 +130,18 @@ CreateSchema(db.sn)
 Commit()`,
 		},
 		{
-			stmt: mustParse("create schema sn"),
+			stmt: mustParse("drop schema sn2"),
 			fail: true,
 			trace: `Begin()
+DropSchema(db.sn2, false)
 Rollback()`,
 		},
 	}
 
 	var buf bytes.Buffer
-	eng := test.NewEngine(&buf)
+	eng := sesEngine{
+		trace: &buf,
+	}
 	ses := evaluate.NewSession(eng, types.ID("maho", false), types.PUBLIC)
 
 	ctx := context.Background()
@@ -185,7 +196,9 @@ func TestSessionEvaluate(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	eng := test.NewEngine(&buf)
+	eng := sesEngine{
+		trace: &buf,
+	}
 	ses := evaluate.NewSession(eng, types.ID("maho", false), types.PUBLIC)
 	ctx := context.Background()
 
@@ -213,4 +226,89 @@ func TestSessionEvaluate(t *testing.T) {
 	if got != want {
 		t.Errorf("Evaluate() got %s want %s", got, want)
 	}
+}
+
+type sesEngine struct {
+	trace io.Writer
+}
+
+type sesTx struct {
+	trace io.Writer
+}
+
+func (eng sesEngine) CreateDatabase(dn types.Identifier, opts storage.OptionsMap) error {
+	fmt.Fprintf(eng.trace, "CreateDatabase(%s, %s)\n", dn, opts)
+	return nil
+}
+
+func (eng sesEngine) DropDatabase(dn types.Identifier, ifExists bool) error {
+	fmt.Fprintf(eng.trace, "DropDatabase(%s, %v)\n", dn, ifExists)
+	return nil
+}
+
+func (eng sesEngine) Begin() engine.Transaction {
+	fmt.Fprintln(eng.trace, "Begin()")
+
+	return sesTx{
+		trace: eng.trace,
+	}
+}
+
+func (tx sesTx) Commit(ctx context.Context) error {
+	fmt.Fprintln(tx.trace, "Commit()")
+	return nil
+}
+
+func (tx sesTx) Rollback() error {
+	fmt.Fprintln(tx.trace, "Rollback()")
+	return nil
+}
+
+func (tx sesTx) CreateSchema(ctx context.Context, sn types.SchemaName) error {
+	fmt.Fprintf(tx.trace, "CreateSchema(%s)\n", sn)
+	return nil
+}
+
+func (tx sesTx) DropSchema(ctx context.Context, sn types.SchemaName, ifExists bool) error {
+	fmt.Fprintf(tx.trace, "DropSchema(%s, %v)\n", sn, ifExists)
+	return errors.New("test engine: drop schema failed")
+}
+
+func (tx sesTx) ListSchemas(ctx context.Context, dn types.Identifier) ([]types.Identifier, error) {
+	fmt.Fprintf(tx.trace, "ListSchemas(%s)\n", dn)
+	return nil, nil
+}
+
+func (tx sesTx) OpenTable(ctx context.Context, tn types.TableName) (engine.Table, error) {
+	fmt.Fprintf(tx.trace, "OpenTable(%s)\n", tn)
+	return nil, nil
+}
+
+func (tx sesTx) CreateTable(ctx context.Context, tn types.TableName, colNames []types.Identifier,
+	colTypes []types.ColumnType, primary []types.ColumnKey) error {
+
+	fmt.Fprintf(tx.trace, "CreateTable(%s, %v, %v, %v)\n", tn, colNames, colTypes, primary)
+	return nil
+}
+
+func (tx sesTx) DropTable(ctx context.Context, tn types.TableName) error {
+	fmt.Fprintf(tx.trace, "DropTable(%s)\n", tn)
+	return nil
+}
+
+func (tx sesTx) ListTables(ctx context.Context, sn types.SchemaName) ([]types.Identifier, error) {
+	fmt.Fprintf(tx.trace, "ListTables(%s)\n", sn)
+	return nil, nil
+}
+
+func (tx sesTx) CreateIndex(ctx context.Context, tn types.TableName, in types.Identifier,
+	key []types.ColumnKey) error {
+
+	fmt.Fprintf(tx.trace, "CreateIndex(%s, %s, %v)\n", tn, in, key)
+	return nil
+}
+
+func (tx sesTx) DropIndex(ctx context.Context, tn types.TableName, in types.Identifier) error {
+	fmt.Fprintf(tx.trace, "DropIndex(%s, %s)\n", tn, in)
+	return nil
 }

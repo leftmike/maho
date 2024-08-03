@@ -64,6 +64,7 @@ func indexKeyToColumnKey(ik sql.IndexKey, colNames []types.Identifier) ([]types.
 	return key, 0
 }
 
+// XXX: test CreateIndex
 func EvaluateCreateIndex(ctx context.Context, tx engine.Transaction, stmt *sql.CreateIndex) error {
 	tbl, err := tx.OpenTable(ctx, stmt.Table)
 	if err != nil {
