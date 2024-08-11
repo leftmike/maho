@@ -44,7 +44,7 @@ type TableType interface {
 	ColumnNames() []types.Identifier
 	ColumnTypes() []types.ColumnType
 	Key() []types.ColumnKey
-	ColumnDefaults() sql.Expr
+	ColumnDefaults() []sql.Expr
 	Indexes() []IndexType
 }
 

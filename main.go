@@ -18,6 +18,9 @@ import (
 -- https://github.com/cockroachdb/cockroach/tree/master/pkg/sql/opt/norm/rules
 
 - https://pkg.go.dev/github.com/google/btree
+
+- IMDb: https://developer.imdb.com/non-commercial-datasets/
+- join order benchmark: https://github.com/gregrahn/join-order-benchmark
 */
 
 func main() {

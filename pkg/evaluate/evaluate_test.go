@@ -20,9 +20,9 @@ import (
 )
 
 var (
-	db = types.ID("db", false)
+	dn = types.ID("db", false)
 	sn = types.SchemaName{
-		Database: db,
+		Database: dn,
 		Schema:   types.ID("sn", false),
 	}
 )
@@ -89,8 +89,23 @@ func TestEvaluatePanic(t *testing.T) {
 	}
 }
 
+func testListSchemas(t *testing.T, tx engine.Transaction, dn types.Identifier,
+	ids []types.Identifier) {
+
+	t.Helper()
+
+	ret, err := tx.ListSchemas(context.Background(), dn)
+	if err != nil {
+		t.Errorf("ListSchemas(%s) failed with %s", dn, err)
+	} else if !reflect.DeepEqual(ids, ret) {
+		t.Errorf("ListSchemas(%s) got %v want %v", dn, ret, ids)
+	}
+}
+
 func testListTables(t *testing.T, tx engine.Transaction, sn types.SchemaName,
 	ids []types.Identifier) {
+
+	t.Helper()
 
 	ret, err := tx.ListTables(context.Background(), sn)
 	if err != nil {
@@ -100,84 +115,30 @@ func testListTables(t *testing.T, tx engine.Transaction, sn types.SchemaName,
 	}
 }
 
-func TestEvaluateCreateTable(t *testing.T) {
+func testListIndexes(t *testing.T, tx engine.Transaction, tn types.TableName,
+	ids []types.Identifier) {
+
+	t.Helper()
+
+	tbl, err := tx.OpenTable(context.Background(), tn)
+	if err != nil {
+		t.Errorf("OpenTable(%s) failed with %s", tn, err)
+		return
+	}
+
+	// XXX
+	var ret []types.Identifier
+	for _, it := range tbl.Type().Indexes() {
+		ret = append(ret, it.Name())
+	}
+	// XXX
+}
+
+func testEvaluate(t *testing.T, cases []evaluateCase) {
+	t.Helper()
+
 	var buf bytes.Buffer
 	tx := newEvalTx(&buf)
-
-	cases := []evaluateCase{
-		{
-			stmt:  mustParse("create schema sn"),
-			trace: "CreateSchema(db.sn)",
-		},
-		{
-			stmt: mustParse("create table t1 (c1 int, c2 bool)"),
-			trace: `OpenTable(db.sn.t1)
-CreateTable(db.sn.t1, [c1 c2], [INT BOOL], [])`,
-		},
-		{
-			stmt:  mustParse("create table t1 (c1 int, c2 bool)"),
-			trace: "OpenTable(db.sn.t1)",
-			fail:  true,
-		},
-		{
-			stmt: mustParse("create table t2 (c1 int primary key, c2 bool)"),
-			trace: `OpenTable(db.sn.t2)
-CreateTable(db.sn.t2, [c1 c2], [INT BOOL], [1])`,
-		},
-		{
-			stmt: mustParse("create table t3 (c1 int, c2 bool, primary key(c2, c1))"),
-			trace: `OpenTable(db.sn.t3)
-CreateTable(db.sn.t3, [c1 c2], [INT BOOL], [2 1])`,
-		},
-		{
-			stmt: mustParse("create table t4 (c1 int, c2 bool, primary key(c2, c1 desc))"),
-			trace: `OpenTable(db.sn.t4)
-CreateTable(db.sn.t4, [c1 c2], [INT BOOL], [2 -1])`,
-		},
-		{
-			stmt:  mustParse("create table tf (c1 int, c2 bool, primary key(c2, c3))"),
-			trace: "OpenTable(db.sn.tf)",
-			fail:  true,
-		},
-		{
-			fn: func() {
-				testListTables(t, tx, sn, []types.Identifier{
-					types.ID("t1", false),
-					types.ID("t2", false),
-					types.ID("t3", false),
-					types.ID("t4", false),
-				})
-			},
-			trace: "ListTables(db.sn)",
-		},
-		{
-			stmt:  mustParse("drop table t1"),
-			trace: "DropTable(db.sn.t1)",
-		},
-		{
-			fn: func() {
-				testListTables(t, tx, sn, []types.Identifier{
-					types.ID("t2", false),
-					types.ID("t3", false),
-					types.ID("t4", false),
-				})
-			},
-			trace: "ListTables(db.sn)",
-		},
-		{
-			stmt:  mustParse("drop table t3"),
-			trace: "DropTable(db.sn.t3)",
-		},
-		{
-			fn: func() {
-				testListTables(t, tx, sn, []types.Identifier{
-					types.ID("t2", false),
-					types.ID("t4", false),
-				})
-			},
-			trace: "ListTables(db.sn)",
-		},
-	}
 
 	r := resolver{
 		Database: types.ID("db", false),
@@ -191,7 +152,7 @@ CreateTable(db.sn.t4, [c1 c2], [INT BOOL], [2 -1])`,
 				panic("must specify one of fn or stmt")
 			}
 
-			c.fn()
+			c.fn(t, tx)
 			continue
 		}
 
@@ -212,6 +173,175 @@ CreateTable(db.sn.t4, [c1 c2], [INT BOOL], [2 -1])`,
 	if got != want {
 		t.Errorf("Evaluate() got %s want %s", got, want)
 	}
+}
+
+func TestEvaluateCreateSchema(t *testing.T) {
+	testEvaluate(t,
+		[]evaluateCase{
+			{
+				stmt:  mustParse("create schema s1"),
+				trace: "CreateSchema(db.s1)",
+			},
+			{
+				stmt:  mustParse("create schema s1"),
+				fail:  true,
+				trace: "CreateSchema(db.s1)",
+			},
+			{
+				stmt:  mustParse("create schema s2"),
+				trace: "CreateSchema(db.s2)",
+			},
+			{
+				stmt:  mustParse("create schema s3"),
+				trace: "CreateSchema(db.s3)",
+			},
+			{
+				fn: func(t *testing.T, tx engine.Transaction) {
+					testListSchemas(t, tx, dn, []types.Identifier{
+						types.ID("s1", false),
+						types.ID("s2", false),
+						types.ID("s3", false),
+					})
+				},
+				trace: "ListSchemas(db)",
+			},
+			{
+				stmt:  mustParse("drop schema s1"),
+				trace: "DropSchema(db.s1, false)",
+			},
+			{
+				fn: func(t *testing.T, tx engine.Transaction) {
+					testListSchemas(t, tx, dn, []types.Identifier{
+						types.ID("s2", false),
+						types.ID("s3", false),
+					})
+				},
+				trace: "ListSchemas(db)",
+			},
+			{
+				stmt:  mustParse("drop schema s3"),
+				trace: "DropSchema(db.s3, false)",
+			},
+			{
+				fn: func(t *testing.T, tx engine.Transaction) {
+					testListSchemas(t, tx, dn, []types.Identifier{
+						types.ID("s2", false),
+					})
+				},
+				trace: "ListSchemas(db)",
+			},
+		})
+}
+
+func TestEvaluateCreateTable(t *testing.T) {
+	testEvaluate(t,
+		[]evaluateCase{
+			{
+				stmt: mustParse("create table t1 (c1 int, c2 bool)"),
+				trace: `OpenTable(db.sn.t1)
+CreateTable(db.sn.t1, [c1 c2], [INT BOOL], [])`,
+			},
+			{
+				stmt:  mustParse("create table t1 (c1 int, c2 bool)"),
+				trace: "OpenTable(db.sn.t1)",
+				fail:  true,
+			},
+			{
+				stmt: mustParse("create table t2 (c1 int primary key, c2 bool)"),
+				trace: `OpenTable(db.sn.t2)
+CreateTable(db.sn.t2, [c1 c2], [INT BOOL], [1])`,
+			},
+			{
+				stmt: mustParse("create table t3 (c1 int, c2 bool, primary key(c2, c1))"),
+				trace: `OpenTable(db.sn.t3)
+CreateTable(db.sn.t3, [c1 c2], [INT BOOL], [2 1])`,
+			},
+			{
+				stmt: mustParse("create table t4 (c1 int, c2 bool, primary key(c2, c1 desc))"),
+				trace: `OpenTable(db.sn.t4)
+CreateTable(db.sn.t4, [c1 c2], [INT BOOL], [2 -1])`,
+			},
+			{
+				stmt:  mustParse("create table tf (c1 int, c2 bool, primary key(c2, c3))"),
+				trace: "OpenTable(db.sn.tf)",
+				fail:  true,
+			},
+			{
+				fn: func(t *testing.T, tx engine.Transaction) {
+					testListTables(t, tx, sn, []types.Identifier{
+						types.ID("t1", false),
+						types.ID("t2", false),
+						types.ID("t3", false),
+						types.ID("t4", false),
+					})
+				},
+				trace: "ListTables(db.sn)",
+			},
+			{
+				stmt:  mustParse("drop table t1"),
+				trace: "DropTable(db.sn.t1)",
+			},
+			{
+				fn: func(t *testing.T, tx engine.Transaction) {
+					testListTables(t, tx, sn, []types.Identifier{
+						types.ID("t2", false),
+						types.ID("t3", false),
+						types.ID("t4", false),
+					})
+				},
+				trace: "ListTables(db.sn)",
+			},
+			{
+				stmt:  mustParse("drop table t3"),
+				trace: "DropTable(db.sn.t3)",
+			},
+			{
+				fn: func(t *testing.T, tx engine.Transaction) {
+					testListTables(t, tx, sn, []types.Identifier{
+						types.ID("t2", false),
+						types.ID("t4", false),
+					})
+				},
+				trace: "ListTables(db.sn)",
+			},
+		})
+}
+
+func TestEvaluateCreateIndex(t *testing.T) {
+	testEvaluate(t,
+		[]evaluateCase{
+			{
+				stmt: mustParse("create table t1 (c1 int, c2 bool)"),
+				trace: `OpenTable(db.sn.t1)
+CreateTable(db.sn.t1, [c1 c2], [INT BOOL], [])`,
+			},
+			{
+				stmt: mustParse("create table t2 (c1 int, c2 bool)"),
+				trace: `OpenTable(db.sn.t2)
+CreateTable(db.sn.t2, [c1 c2], [INT BOOL], [])`,
+			},
+			{
+				stmt: mustParse("create index i1 on t1 (c1)"),
+				trace: `OpenTable(db.sn.t1)
+CreateIndex(db.sn.t1, i1, [1])`,
+			},
+			{
+				stmt:  mustParse("create index i1 on t1 (c1)"),
+				trace: "OpenTable(db.sn.t1)",
+				fail:  true,
+			},
+			{
+				stmt:  mustParse("create index i2 on t1 (c3)"),
+				trace: "OpenTable(db.sn.t1)",
+				fail:  true,
+			},
+			{
+				stmt: mustParse("create index i2 on t1 (c2, c1)"),
+				trace: `OpenTable(db.sn.t1)
+CreateIndex(db.sn.t1, i2, [2 1])`,
+			},
+			// XXX
+		})
 }
 
 type resolver struct {
@@ -379,10 +509,7 @@ func (tx *evalTx) CreateIndex(ctx context.Context, tn types.TableName, in types.
 
 	fmt.Fprintf(tx.trace, "CreateIndex(%s, %s, %v)\n", tn, in, key)
 
-	tbl, ok := tx.tables[tn]
-	if !ok {
-		return fmt.Errorf("create index: table not found: %s", tn)
-	}
+	tbl := tx.tables[tn]
 	if _, ok := tbl.indexes[in]; ok {
 		return fmt.Errorf("create index: index already exists: %s: %s", tn, in)
 	}
@@ -433,7 +560,7 @@ func (tbl *evalTable) Key() []types.ColumnKey {
 	return tbl.primary
 }
 
-func (tbl *evalTable) ColumnDefaults() sql.Expr {
+func (tbl *evalTable) ColumnDefaults() []sql.Expr {
 	return nil // XXX
 }
 

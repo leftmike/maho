@@ -22,7 +22,7 @@ type evaluateCase struct {
 	panicked bool
 	fail     bool
 	trace    string
-	fn       func()
+	fn       func(t *testing.T, tx engine.Transaction)
 }
 
 func evaluateTrace(cases []evaluateCase) string {
