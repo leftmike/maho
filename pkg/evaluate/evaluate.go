@@ -3,6 +3,7 @@ package evaluate
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"github.com/leftmike/maho/pkg/engine"
 	"github.com/leftmike/maho/pkg/parser/sql"
@@ -71,17 +72,19 @@ func EvaluateCreateIndex(ctx context.Context, tx engine.Transaction, stmt *sql.C
 	}
 
 	tt := tbl.Type()
-	for _, it := range tt.Indexes() {
-		if it.Name() == stmt.Index {
-			if stmt.IfNotExists {
-				return nil
-			}
-			return fmt.Errorf("evaluate: create index: index already exists: %s: %s", stmt.Table,
-				stmt.Index)
+	if slices.ContainsFunc(tt.Indexes,
+		func(it engine.IndexType) bool {
+			return it.Name == stmt.Index
+		}) {
+
+		if stmt.IfNotExists {
+			return nil
 		}
+		return fmt.Errorf("evaluate: create index: index already exists: %s: %s", stmt.Table,
+			stmt.Index)
 	}
 
-	key, col := indexKeyToColumnKey(stmt.Key, tt.ColumnNames())
+	key, col := indexKeyToColumnKey(stmt.Key, tt.ColumnNames)
 	if col != 0 {
 		return fmt.Errorf("evaluate: create index: %s: %s: key: unknown column: %s",
 			stmt.Table, stmt.Index, col)

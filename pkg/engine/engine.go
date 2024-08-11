@@ -35,22 +35,22 @@ type Transaction interface {
 
 type Table interface {
 	Name() types.TableName
-	Type() TableType
+	Type() *TableType
 	// XXX
 }
 
-type TableType interface {
-	Version() uint32
-	ColumnNames() []types.Identifier
-	ColumnTypes() []types.ColumnType
-	Key() []types.ColumnKey
-	ColumnDefaults() []sql.Expr
-	Indexes() []IndexType
+type TableType struct {
+	Version        uint32
+	ColumnNames    []types.Identifier
+	ColumnTypes    []types.ColumnType
+	Key            []types.ColumnKey
+	ColumnDefaults []sql.Expr
+	Indexes        []IndexType
 }
 
-type IndexType interface {
-	Name() types.Identifier
-	Key() []types.ColumnKey
+type IndexType struct {
+	Name types.Identifier
+	Key  []types.ColumnKey
 }
 
 type engine struct {

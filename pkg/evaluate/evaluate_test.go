@@ -25,6 +25,11 @@ var (
 		Database: dn,
 		Schema:   types.ID("sn", false),
 	}
+	tn1 = types.TableName{
+		Database: dn,
+		Schema:   types.ID("sn", false),
+		Table:    types.ID("t1", false),
+	}
 )
 
 func mustParse(s string) sql.Stmt {
@@ -116,22 +121,19 @@ func testListTables(t *testing.T, tx engine.Transaction, sn types.SchemaName,
 }
 
 func testListIndexes(t *testing.T, tx engine.Transaction, tn types.TableName,
-	ids []types.Identifier) {
+	its []engine.IndexType) {
 
 	t.Helper()
 
 	tbl, err := tx.OpenTable(context.Background(), tn)
 	if err != nil {
 		t.Errorf("OpenTable(%s) failed with %s", tn, err)
-		return
+	} else {
+		tt := tbl.Type()
+		if !reflect.DeepEqual(tt.Indexes, its) {
+			t.Errorf("Indexes(%s) got %v want %v", tn, tt.Indexes, its)
+		}
 	}
-
-	// XXX
-	var ret []types.Identifier
-	for _, it := range tbl.Type().Indexes() {
-		ret = append(ret, it.Name())
-	}
-	// XXX
 }
 
 func testEvaluate(t *testing.T, cases []evaluateCase) {
@@ -340,7 +342,85 @@ CreateIndex(db.sn.t1, i1, [1])`,
 				trace: `OpenTable(db.sn.t1)
 CreateIndex(db.sn.t1, i2, [2 1])`,
 			},
-			// XXX
+			{
+				fn: func(t *testing.T, tx engine.Transaction) {
+					testListIndexes(t, tx, tn1, []engine.IndexType{
+						{
+							Name: types.ID("i1", false),
+							Key: []types.ColumnKey{
+								types.MakeColumnKey(0, false),
+							},
+						},
+						{
+							Name: types.ID("i2", false),
+							Key: []types.ColumnKey{
+								types.MakeColumnKey(1, false),
+								types.MakeColumnKey(0, false),
+							},
+						},
+					})
+				},
+				trace: "OpenTable(db.sn.t1)",
+			},
+			{
+				stmt: mustParse("create index i3 on t1 (c2)"),
+				trace: `OpenTable(db.sn.t1)
+CreateIndex(db.sn.t1, i3, [2])`,
+			},
+			{
+				fn: func(t *testing.T, tx engine.Transaction) {
+					testListIndexes(t, tx, tn1, []engine.IndexType{
+						{
+							Name: types.ID("i1", false),
+							Key: []types.ColumnKey{
+								types.MakeColumnKey(0, false),
+							},
+						},
+						{
+							Name: types.ID("i2", false),
+							Key: []types.ColumnKey{
+								types.MakeColumnKey(1, false),
+								types.MakeColumnKey(0, false),
+							},
+						},
+						{
+							Name: types.ID("i3", false),
+							Key: []types.ColumnKey{
+								types.MakeColumnKey(1, false),
+							},
+						},
+					})
+				},
+				trace: "OpenTable(db.sn.t1)",
+			},
+			{
+				stmt:  mustParse("drop index i2 on t1"),
+				trace: "DropIndex(db.sn.t1, i2)",
+			},
+			{
+				stmt:  mustParse("drop index i2 on t1"),
+				trace: "DropIndex(db.sn.t1, i2)",
+				fail:  true,
+			},
+			{
+				fn: func(t *testing.T, tx engine.Transaction) {
+					testListIndexes(t, tx, tn1, []engine.IndexType{
+						{
+							Name: types.ID("i1", false),
+							Key: []types.ColumnKey{
+								types.MakeColumnKey(0, false),
+							},
+						},
+						{
+							Name: types.ID("i3", false),
+							Key: []types.ColumnKey{
+								types.MakeColumnKey(1, false),
+							},
+						},
+					})
+				},
+				trace: "OpenTable(db.sn.t1)",
+			},
 		})
 }
 
@@ -373,17 +453,8 @@ type evalTx struct {
 }
 
 type evalTable struct {
-	name     types.TableName
-	version  uint32
-	colNames []types.Identifier
-	colTypes []types.ColumnType
-	primary  []types.ColumnKey
-	indexes  map[types.Identifier]*evalIndex
-}
-
-type evalIndex struct {
-	name types.Identifier
-	key  []types.ColumnKey
+	name types.TableName
+	tt   *engine.TableType
 }
 
 func newEvalTx(trace io.Writer) *evalTx {
@@ -465,12 +536,13 @@ func (tx *evalTx) CreateTable(ctx context.Context, tn types.TableName,
 		return fmt.Errorf("create table: table already exists: %s", tn)
 	}
 	tx.tables[tn] = &evalTable{
-		name:     tn,
-		version:  1,
-		colNames: slices.Clone(colNames),
-		colTypes: slices.Clone(colTypes),
-		primary:  slices.Clone(primary),
-		indexes:  map[types.Identifier]*evalIndex{},
+		name: tn,
+		tt: &engine.TableType{
+			Version:     1,
+			ColumnNames: slices.Clone(colNames),
+			ColumnTypes: slices.Clone(colTypes),
+			Key:         slices.Clone(primary),
+		},
 	}
 	return nil
 }
@@ -510,13 +582,19 @@ func (tx *evalTx) CreateIndex(ctx context.Context, tn types.TableName, in types.
 	fmt.Fprintf(tx.trace, "CreateIndex(%s, %s, %v)\n", tn, in, key)
 
 	tbl := tx.tables[tn]
-	if _, ok := tbl.indexes[in]; ok {
+	if slices.ContainsFunc(tbl.tt.Indexes,
+		func(it engine.IndexType) bool {
+			return it.Name == in
+		}) {
+
 		return fmt.Errorf("create index: index already exists: %s: %s", tn, in)
 	}
-	tbl.indexes[in] = &evalIndex{
-		name: in,
-		key:  key,
-	}
+
+	tbl.tt.Indexes = append(tbl.tt.Indexes,
+		engine.IndexType{
+			Name: in,
+			Key:  slices.Clone(key),
+		})
 	return nil
 }
 
@@ -529,10 +607,19 @@ func (tx *evalTx) DropIndex(ctx context.Context, tn types.TableName,
 	if !ok {
 		return fmt.Errorf("drop index: table not found: %s", tn)
 	}
-	if _, ok := tbl.indexes[in]; !ok {
+
+	var dropped bool
+	tbl.tt.Indexes = slices.DeleteFunc(tbl.tt.Indexes,
+		func(it engine.IndexType) bool {
+			if it.Name == in {
+				dropped = true
+				return true
+			}
+			return false
+		})
+	if !dropped {
 		return fmt.Errorf("drop index: index not found: %s: %s", tn, in)
 	}
-	delete(tbl.indexes, in)
 	return nil
 }
 
@@ -540,47 +627,6 @@ func (tbl *evalTable) Name() types.TableName {
 	return tbl.name
 }
 
-func (tbl *evalTable) Type() engine.TableType {
-	return tbl
-}
-
-func (tbl *evalTable) Version() uint32 {
-	return tbl.version
-}
-
-func (tbl *evalTable) ColumnNames() []types.Identifier {
-	return tbl.colNames
-}
-
-func (tbl *evalTable) ColumnTypes() []types.ColumnType {
-	return tbl.colTypes
-}
-
-func (tbl *evalTable) Key() []types.ColumnKey {
-	return tbl.primary
-}
-
-func (tbl *evalTable) ColumnDefaults() []sql.Expr {
-	return nil // XXX
-}
-
-func (tbl *evalTable) Indexes() []engine.IndexType {
-	indexes := make([]engine.IndexType, 0, len(tbl.indexes))
-	for _, it := range tbl.indexes {
-		indexes = append(indexes, it)
-	}
-
-	sort.Slice(indexes,
-		func(i, j int) bool {
-			return strings.Compare(indexes[i].Name().String(), indexes[j].Name().String()) < 0
-		})
-	return indexes
-}
-
-func (it *evalIndex) Name() types.Identifier {
-	return it.name
-}
-
-func (it *evalIndex) Key() []types.ColumnKey {
-	return it.key
+func (tbl *evalTable) Type() *engine.TableType {
+	return tbl.tt
 }
