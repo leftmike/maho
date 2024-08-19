@@ -30,6 +30,29 @@ var (
 	BoolColType       = ColumnType{Type: BoolType, NotNull: true}
 	StringColType     = ColumnType{Type: StringType, Size: 4096, NotNull: true}
 	NullStringColType = ColumnType{Type: StringType, Size: 4096}
+
+	ColumnTypes = map[Identifier]ColumnType{
+		BINARY:    {Type: BytesType, Fixed: true, Size: 1},
+		VARBINARY: {Type: BytesType, Fixed: false, Size: 1},
+		BLOB:      {Type: BytesType, Fixed: false, Size: MaxColumnSize},
+		BYTEA:     {Type: BytesType, Fixed: false, Size: MaxColumnSize},
+		BYTES:     {Type: BytesType, Fixed: false, Size: MaxColumnSize},
+		CHAR:      {Type: StringType, Fixed: true, Size: 1},
+		CHARACTER: {Type: StringType, Fixed: true, Size: 1},
+		VARCHAR:   {Type: StringType, Fixed: false, Size: 1},
+		TEXT:      {Type: StringType, Fixed: false, Size: MaxColumnSize},
+		BOOL:      {Type: BoolType, Size: 1},
+		BOOLEAN:   {Type: BoolType, Size: 1},
+		DOUBLE:    {Type: Float64Type, Size: 8},
+		REAL:      {Type: Float64Type, Size: 4},
+		SMALLINT:  {Type: Int64Type, Size: 2},
+		INT2:      {Type: Int64Type, Size: 2},
+		INT:       {Type: Int64Type, Size: 4},
+		INTEGER:   {Type: Int64Type, Size: 4},
+		INT4:      {Type: Int64Type, Size: 4},
+		INT8:      {Type: Int64Type, Size: 8},
+		BIGINT:    {Type: Int64Type, Size: 8},
+	}
 )
 
 func (ct ColumnType) String() string {

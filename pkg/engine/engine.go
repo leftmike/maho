@@ -59,10 +59,41 @@ type engine struct {
 
 type transaction struct{}
 
+const (
+	sequencesTableId storage.TableId = iota + storage.EngineTableId
+	databasesTableId
+	schemasTableId
+	tablesTableId
+	columnsTableId
+	maxReservedTableId storage.TableId = 512
+)
+
 func NewEngine(st storage.Store) Engine {
 	return &engine{
 		st: st,
 	}
+}
+
+type sequencesRow struct {
+	Sequence string `maho:"varchar(128) primary key not null"`
+	Current  int64  `maho:"bigint not null"`
+}
+
+type databasesRow struct {
+	Database string
+}
+
+type schemasRow struct {
+	primary  struct{} `maho:"database, schema"`
+	Database string   `maho:"varchar(128) not null"`
+	Schema   string   `maho:"varchar(128) not null"`
+}
+
+type tablesRow struct {
+	Database string
+	Schema   string
+	Table    string
+	TableID  int64
 }
 
 func (eng *engine) CreateDatabase(dn types.Identifier, opts storage.OptionsMap) error {

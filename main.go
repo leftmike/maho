@@ -16,11 +16,14 @@ import (
 -- https://github.com/cockroachdb/cockroach/tree/master/pkg/sql/opt/optgen
 -- https://github.com/cockroachdb/cockroach/tree/master/pkg/sql/opt/memo
 -- https://github.com/cockroachdb/cockroach/tree/master/pkg/sql/opt/norm/rules
+-- IMDb: https://developer.imdb.com/non-commercial-datasets/
+-- join order benchmark: https://github.com/gregrahn/join-order-benchmark
 
 - https://pkg.go.dev/github.com/google/btree
 
-- IMDb: https://developer.imdb.com/non-commercial-datasets/
-- join order benchmark: https://github.com/gregrahn/join-order-benchmark
+- column types
+-- logical: engine and above
+-- physical: storage
 */
 
 func main() {
