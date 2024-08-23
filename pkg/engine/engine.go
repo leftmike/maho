@@ -75,25 +75,24 @@ func NewEngine(st storage.Store) Engine {
 }
 
 type sequencesRow struct {
-	Sequence string `maho:"varchar(128) primary key not null"`
-	Current  int64  `maho:"bigint not null"`
+	Sequence string `maho:"size=128,primary"`
+	Current  int64
 }
 
 type databasesRow struct {
-	Database string
+	Database string `maho:"size=128,primary"`
 }
 
 type schemasRow struct {
-	primary  struct{} `maho:"database, schema"`
-	Database string   `maho:"varchar(128) not null"`
-	Schema   string   `maho:"varchar(128) not null"`
+	Database string `maho:"size=128,primary"`
+	Schema   string `maho:"size=128,primary"`
 }
 
 type tablesRow struct {
-	Database string
-	Schema   string
-	Table    string
-	TableID  int64
+	Database string `maho:"size=128,primary"`
+	Schema   string `maho:"size=128,primary"`
+	Table    string `maho:"size=128,primary"`
+	TableID  storage.TableId
 }
 
 func (eng *engine) CreateDatabase(dn types.Identifier, opts storage.OptionsMap) error {

@@ -615,6 +615,31 @@ func (p *Parser) parseCreateDetails(s *sql.CreateTable) {
 	}
 }
 
+var (
+	columnTypes = map[types.Identifier]types.ColumnType{
+		types.BINARY:    {Type: types.BytesType, Fixed: true, Size: 1},
+		types.VARBINARY: {Type: types.BytesType, Fixed: false, Size: 1},
+		types.BLOB:      {Type: types.BytesType, Fixed: false, Size: types.MaxColumnSize},
+		types.BYTEA:     {Type: types.BytesType, Fixed: false, Size: types.MaxColumnSize},
+		types.BYTES:     {Type: types.BytesType, Fixed: false, Size: types.MaxColumnSize},
+		types.CHAR:      {Type: types.StringType, Fixed: true, Size: 1},
+		types.CHARACTER: {Type: types.StringType, Fixed: true, Size: 1},
+		types.VARCHAR:   {Type: types.StringType, Fixed: false, Size: 1},
+		types.TEXT:      {Type: types.StringType, Fixed: false, Size: types.MaxColumnSize},
+		types.BOOL:      {Type: types.BoolType, Size: 1},
+		types.BOOLEAN:   {Type: types.BoolType, Size: 1},
+		types.DOUBLE:    {Type: types.Float64Type, Size: 8},
+		types.REAL:      {Type: types.Float64Type, Size: 4},
+		types.SMALLINT:  {Type: types.Int64Type, Size: 2},
+		types.INT2:      {Type: types.Int64Type, Size: 2},
+		types.INT:       {Type: types.Int64Type, Size: 4},
+		types.INTEGER:   {Type: types.Int64Type, Size: 4},
+		types.INT4:      {Type: types.Int64Type, Size: 4},
+		types.INT8:      {Type: types.Int64Type, Size: 8},
+		types.BIGINT:    {Type: types.Int64Type, Size: 8},
+	}
+)
+
 func (p *Parser) parseColumnType() types.ColumnType {
 	/*
 		data_type =
@@ -642,7 +667,7 @@ func (p *Parser) parseColumnType() types.ColumnType {
 	*/
 
 	typ := p.expectIdentifier("expected a data type")
-	ct, found := types.ColumnTypes[typ]
+	ct, found := columnTypes[typ]
 	if !found {
 		p.error(fmt.Sprintf("expected a data type, got %s", typ))
 	}

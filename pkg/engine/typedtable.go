@@ -1,224 +1,241 @@
 package engine
 
 import (
-	"errors"
+	"context"
 	"fmt"
 	"io"
+	"reflect"
+	"strconv"
 	"strings"
 	"unicode"
 
+	"github.com/leftmike/maho/pkg/storage"
 	"github.com/leftmike/maho/pkg/types"
 )
 
-func skipWhitespace(rs io.RuneScanner) {
-	for {
-		r, _, err := rs.ReadRune()
-		if err != nil {
-			break
-		} else if r != ' ' {
-			rs.UnreadRune()
-			break
-		}
-	}
+type typedTableInfo struct {
+	colNames []types.Identifier
+	colTypes []types.ColumnType
+	primary  []types.ColumnKey
 }
 
-func readIdentifier(rs io.RuneScanner, quoted bool) (types.Identifier, error) {
-	var buf strings.Builder
-	for {
-		r, _, err := rs.ReadRune()
-		if err == io.EOF && buf.Len() > 0 {
-			break
-		} else if err != nil {
-			return 0, err
-		} else if !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '_' && r != '$' {
-			rs.UnreadRune()
-			break
-		}
-
-		buf.WriteRune(r)
-	}
-
-	return types.ID(buf.String(), quoted), nil
-}
-
-func readInteger(rs io.RuneScanner) (uint, error) {
-	var ui uint
-	var valid bool
-	for {
-		r, _, err := rs.ReadRune()
-		if err == io.EOF {
-			break
-		} else if err != nil {
-			return 0, err
-		} else if r < '0' || r > '9' {
-			rs.UnreadRune()
-			break
-		}
-
-		ui = ui*10 + uint(r-'0')
-		valid = true
-	}
-
-	if !valid {
-		return 0, errors.New("typed table: expected an integer")
-	}
-
-	return ui, nil
-}
-
-func columnNumber(id types.Identifier, colNames []types.Identifier) (types.ColumnNum, bool) {
-	for num, col := range colNames {
-		if id == col {
-			return types.ColumnNum(num), true
-		}
-	}
-	return 0, false
-}
-
-func ParsePrimary(s string, colNames []types.Identifier) ([]types.ColumnKey, error) {
-	// column [',' ...]
-
-	rs := strings.NewReader(s)
-
-	var key []types.ColumnKey
-	for {
-		if len(key) > 0 {
-			skipWhitespace(rs)
-			r, _, err := rs.ReadRune()
-			if err == io.EOF {
-				break
-			} else if err != nil {
-				return nil, err
-			} else if r != ',' {
-				return nil, fmt.Errorf("typed table: comma expected: %c", r)
-			}
-		}
-
-		skipWhitespace(rs)
-		id, err := readIdentifier(rs, true)
-		if err != nil {
-			return nil, err
-		}
-
-		num, ok := columnNumber(id, colNames)
-		if !ok {
-			return nil, fmt.Errorf("typed table: column not found: %s", id)
-		}
-
-		key = append(key, types.MakeColumnKey(num, false))
-	}
-
-	return key, nil
-}
-
-func ParseColumn(s string) (types.ColumnType, bool, error) {
-	/*
-		data_type [column_constraint ...]
-		column_constraint =
-		      NOT NULL
-		    | PRIMARY KEY
-		data_type =
-			  BINARY ['(' length ')']
-			| VARBINARY ['(' length ')']
-			| BLOB ['(' length ')']
-			| BYTEA ['(' length ')']
-			| BYTES ['(' length ')']
-			| CHAR ['(' length ')']
-			| CHARACTER ['(' length ')']
-			| VARCHAR ['(' length ')']
-			| TEXT ['(' length ')']
-			| BOOL
-			| BOOLEAN
-			| DOUBLE
-			| REAL
-			| SMALLINT
-			| INT2
-			| INT
-			| INTEGER
-			| INT4
-			| INTEGER
-			| BIGINT
-			| INT8
-	*/
-
-	rs := strings.NewReader(s)
-
-	skipWhitespace(rs)
-	typ, err := readIdentifier(rs, false)
+func fieldNameToColumnName(n string) types.Identifier {
+	s := strings.NewReader(n)
+	r, _, err := s.ReadRune()
 	if err != nil {
-		return types.ColumnType{}, false, err
+		panic(fmt.Sprintf("typed table: bad field name: %s: %s", n, err))
+	}
+	if !unicode.IsUpper(r) {
+		panic(fmt.Sprintf("typed table: bad field name: %s", n))
 	}
 
-	ct, found := types.ColumnTypes[typ]
-	if !found {
-		return ct, false, fmt.Errorf("typed table: expected a valid data type: %s", typ)
-	}
+	var buf strings.Builder
+	buf.WriteRune(unicode.ToLower(r))
 
-	if ct.Type == types.StringType || ct.Type == types.BytesType {
-		skipWhitespace(rs)
-		r, _, err := rs.ReadRune()
-		if err == io.EOF {
-			return ct, false, nil
-		} else if err != nil {
-			return ct, false, err
-		} else if r == '(' {
-			skipWhitespace(rs)
-			ui, err := readInteger(rs)
-			if err != nil {
-				return ct, false, err
-			}
-
-			skipWhitespace(rs)
-			ct.Size = uint32(ui)
-
-			skipWhitespace(rs)
-			r, _, err := rs.ReadRune()
-			if err != nil {
-				return ct, false, err
-			} else if r != ')' {
-				return ct, false, fmt.Errorf("typed table: expected ): %c", r)
-			}
-		} else {
-			rs.UnreadRune()
-		}
-	}
-
-	var primary bool
+	upper := true
 	for {
-		skipWhitespace(rs)
-		id, err := readIdentifier(rs, false)
+		r, _, err = s.ReadRune()
 		if err == io.EOF {
 			break
 		} else if err != nil {
-			return ct, false, err
+			panic(fmt.Sprintf("typed table: bad field name: %s: %s", n, err))
 		}
 
-		if id == types.NOT {
-			skipWhitespace(rs)
-			id, err = readIdentifier(rs, false)
-			if err != nil {
-				return ct, false, err
+		if unicode.IsUpper(r) {
+			if !upper {
+				buf.WriteRune('_')
 			}
-			if id != types.NULL {
-				return ct, false, fmt.Errorf("typed table: expected NULL: %s", id)
-			}
-
-			ct.NotNull = true
-		} else if id == types.PRIMARY {
-			skipWhitespace(rs)
-			id, err = readIdentifier(rs, false)
-			if err != nil {
-				return ct, false, err
-			}
-			if id != types.KEY {
-				return ct, false, fmt.Errorf("typed table: expected KEY: %s", id)
-			}
-
-			primary = true
+			buf.WriteRune(unicode.ToLower(r))
+			upper = true
 		} else {
-			return ct, false, fmt.Errorf("typed table: expected a column constraint: %s", id)
+			buf.WriteRune(r)
+			upper = false
 		}
 	}
 
-	return ct, primary, nil
+	return types.ID(buf.String(), true)
+}
+
+var (
+	validTags = map[string]bool{
+		"name":    true,
+		"primary": false,
+		"fixed":   false,
+		"size":    true,
+	}
+)
+
+func fieldTags(s string) map[string]string {
+	if s == "" {
+		return nil
+	}
+
+	tags := map[string]string{}
+	flds := strings.Split(s, ",")
+	for _, fld := range flds {
+		kv := strings.Split(fld, "=")
+		hasKV, ok := validTags[kv[0]]
+		if !ok || (hasKV && len(kv) != 2) || (!hasKV && len(kv) != 1) {
+			panic(fmt.Sprintf("typed table: bad struct field tag: %s", fld))
+		}
+
+		if hasKV {
+			tags[kv[0]] = kv[1]
+		} else {
+			tags[kv[0]] = ""
+		}
+	}
+
+	return tags
+}
+
+func makeTypedTableInfo(row interface{}) *typedTableInfo {
+	typ := reflect.TypeOf(row)
+	//val := reflect.ValueOf(row)
+	if typ.Kind() == reflect.Pointer {
+		typ = typ.Elem()
+		//val = val.Elem()
+	}
+
+	if typ.Kind() != reflect.Struct {
+		panic(fmt.Sprintf("typed table: not a struct or a pointer to a struct: %T", row))
+	}
+
+	var colNames []types.Identifier
+	var colTypes []types.ColumnType
+	var primary []types.ColumnKey
+	for idx := 0; idx < typ.NumField(); idx += 1 {
+		fld := typ.Field(idx)
+		tags := fieldTags(fld.Tag.Get("maho"))
+		if name, ok := tags["name"]; ok {
+			colNames = append(colNames, types.ID(name, true))
+		} else {
+			colNames = append(colNames, fieldNameToColumnName(fld.Name))
+		}
+
+		size := uint32(1)
+		if val, ok := tags["size"]; ok {
+			n, err := strconv.Atoi(val)
+			if err != nil || n <= 0 {
+				panic(fmt.Sprintf("typed table: size not a positive integer: %s: %s", val, err))
+			}
+			size = uint32(n)
+		}
+
+		var fixed bool
+		if _, ok := tags["fixed"]; ok {
+			fixed = true
+		}
+
+		notNull := true
+		ftyp := fld.Type
+		if ftyp.Kind() == reflect.Pointer {
+			ftyp = ftyp.Elem()
+			notNull = false
+		}
+
+		var vt types.ValueType
+		switch ftyp.Kind() {
+		case reflect.Bool:
+			vt = types.BoolType
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+			reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+			vt = types.Int64Type
+			size = uint32(ftyp.Size())
+		case reflect.Float32, reflect.Float64:
+			vt = types.Float64Type
+			size = 8
+		case reflect.Array, reflect.Slice:
+			elem := ftyp.Elem()
+			if elem.Kind() != reflect.Uint8 || elem.Size() != 1 {
+				panic(fmt.Sprintf("typed table: must slice or array of bytes: %s", elem))
+			}
+			vt = types.BytesType
+			if ftyp.Kind() == reflect.Array {
+				size = uint32(ftyp.Size())
+				fixed = true
+			}
+		case reflect.String:
+			vt = types.StringType
+		default:
+			panic(fmt.Sprintf("typed table: bad field type: %s: %s", fld.Name, ftyp.Kind()))
+		}
+
+		ct := types.ColumnType{
+			Type:    vt,
+			Size:    size,
+			Fixed:   fixed,
+			NotNull: notNull,
+		}
+		colTypes = append(colTypes, ct)
+
+		if _, ok := tags["primary"]; ok {
+			primary = append(primary, types.MakeColumnKey(types.ColumnNum(idx), false))
+		}
+	}
+
+	return &typedTableInfo{
+		colNames: colNames,
+		colTypes: colTypes,
+		primary:  primary,
+	}
+}
+
+type typedTable struct {
+	tbl storage.Table
+}
+
+type typedRows struct {
+	rows storage.Rows
+}
+
+func openTypedTable(ctx context.Context, tx storage.Transaction, tid storage.TableId,
+	row interface{}) (*typedTable, error) {
+
+	// XXX
+	return nil, nil
+}
+
+func createTypedTable(ctx context.Context, tx storage.Transaction, tid storage.TableId,
+	tn types.TableName, row interface{}) error {
+
+	// XXX
+	return nil
+}
+
+func (tt *typedTable) rows(ctx context.Context, minRow, maxRow interface{},
+	pred storage.Predicate) (*typedRows, error) {
+
+	// XXX
+	return nil, nil
+}
+
+func (tt *typedTable) update(ctx context.Context, rid storage.RowId, update interface{}) error {
+	// XXX
+	return nil
+}
+
+func (tt *typedTable) delete(ctx context.Context, rid storage.RowId) error {
+	// XXX
+	return nil
+}
+
+func (tt *typedTable) insert(ctx context.Context, row interface{}) error {
+	// XXX
+	return nil
+}
+
+func (tr *typedRows) next(ctx context.Context, row interface{}) error {
+	// XXX
+	return nil
+}
+
+func (tr *typedRows) current() (storage.RowId, error) {
+	return tr.rows.Current()
+}
+
+func (tr *typedRows) close(ctx context.Context) error {
+	err := tr.rows.Close(ctx)
+	tr.rows = nil
+	return err
 }

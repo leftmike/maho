@@ -1,117 +1,147 @@
-package engine_test
+package engine
 
 import (
 	"reflect"
 	"testing"
 
-	"github.com/leftmike/maho/pkg/engine"
 	"github.com/leftmike/maho/pkg/types"
 )
 
-func TestParsePrimary(t *testing.T) {
-	cases := []struct {
-		s    string
-		key  []types.ColumnKey
-		fail bool
-	}{
-		{s: "c1", key: []types.ColumnKey{types.MakeColumnKey(0, false)}},
-		{s: "col1", fail: true},
-		{
-			s: "c1, c2",
-			key: []types.ColumnKey{
-				types.MakeColumnKey(0, false),
-				types.MakeColumnKey(1, false),
-			},
-		},
-		{
-			s: "c4 ,c3,c2   ",
-			key: []types.ColumnKey{
-				types.MakeColumnKey(3, false),
-				types.MakeColumnKey(2, false),
-				types.MakeColumnKey(1, false),
-			},
-		},
-		{s: "c1 c2", fail: true},
-		{s: "c1, c2,", fail: true},
-		{s: ", c1, c2", fail: true},
-	}
-
-	colNames := []types.Identifier{
-		types.ID("c1", false),
-		types.ID("c2", false),
-		types.ID("c3", false),
-		types.ID("c4", false),
-	}
-
-	for _, c := range cases {
-		key, err := engine.ParsePrimary(c.s, colNames)
-		if err != nil {
-			if !c.fail {
-				t.Errorf("ParsePrimary(%s) failed with %s", c.s, err)
+func typedTableInfoPanicked(fn func() *typedTableInfo) (ti *typedTableInfo, panicked bool) {
+	defer func() {
+		if r := recover(); r != nil {
+			if _, ok := r.(string); ok {
+				panicked = true
+			} else {
+				panic(r)
 			}
-		} else if c.fail {
-			t.Errorf("ParsePrimary(%s) did not fail", c.s)
-		} else if !reflect.DeepEqual(key, c.key) {
-			t.Errorf("ParsePrimary(%s) got %v want %v", c.s, key, c.key)
 		}
-	}
+	}()
+
+	return fn(), false
 }
 
-func TestParseColumn(t *testing.T) {
+func TestMakeTypedTableInfo(t *testing.T) {
 	cases := []struct {
-		s       string
-		ct      types.ColumnType
-		primary bool
-		fail    bool
+		row      interface{}
+		ti       *typedTableInfo
+		panicked bool
 	}{
-		{s: "varchar(123)", ct: types.ColumnType{Type: types.StringType, Size: 123}},
-		{s: "varchar(abc)", fail: true},
-		{s: "char(123", fail: true},
-		{s: "char", ct: types.ColumnType{Type: types.StringType, Fixed: true, Size: 1}},
-		{s: "bytes ( 456 ) ", ct: types.ColumnType{Type: types.BytesType, Size: 456}},
-		{s: "int not null", ct: types.ColumnType{Type: types.Int64Type, Size: 4, NotNull: true}},
-		{s: "int not", fail: true},
-		{s: "int not null not", fail: true},
+		{row: 123, panicked: true},
+		{row: struct{}{}, ti: &typedTableInfo{}},
+		{row: struct{ aBC int }{}, panicked: true},
 		{
-			s:       "int primary key",
-			ct:      types.ColumnType{Type: types.Int64Type, Size: 4},
-			primary: true,
+			row: struct {
+				Abc int `maho:"notnull,name=ghi=jkl,primary"`
+			}{},
+			panicked: true,
 		},
 		{
-			s:       "int not null primary key",
-			ct:      types.ColumnType{Type: types.Int64Type, Size: 4, NotNull: true},
-			primary: true,
+			row: struct {
+				Abc int `maho:"notnull=true"`
+			}{},
+			panicked: true,
 		},
 		{
-			s:       "int primary key not null",
-			ct:      types.ColumnType{Type: types.Int64Type, Size: 4, NotNull: true},
-			primary: true,
+			row: struct {
+				Abc int `maho:"name"`
+			}{},
+			panicked: true,
 		},
 		{
-			s:       "int primary key",
-			ct:      types.ColumnType{Type: types.Int64Type, Size: 4},
-			primary: true,
+			row: struct {
+				ColNum   byte    `db:"name,primary=123"`
+				Database string  `maho:"size=123"`
+				Abcdef   *string `maho:"size=45,fixed"`
+				AbcID    []byte  `maho:"size=16"`
+				Aaaaa    [32]byte
+				ABCDEF   *uint32
+				DefGHi   int16 `maho:"name=DEFGHI"`
+			}{},
+			ti: &typedTableInfo{
+				colNames: []types.Identifier{
+					types.ID("col_num", true),
+					types.ID("database", true),
+					types.ID("abcdef", true),
+					types.ID("abc_id", true),
+					types.ID("aaaaa", true),
+					types.ID("abcdef", true),
+					types.ID("DEFGHI", true),
+				},
+				colTypes: []types.ColumnType{
+					{Type: types.Int64Type, Size: 1, NotNull: true},
+					{Type: types.StringType, Size: 123, NotNull: true},
+					{Type: types.StringType, Size: 45, Fixed: true},
+					{Type: types.BytesType, Size: 16, NotNull: true},
+					{Type: types.BytesType, Size: 32, Fixed: true, NotNull: true},
+					{Type: types.Int64Type, Size: 4},
+					{Type: types.Int64Type, Size: 2, NotNull: true},
+				},
+			},
 		},
-		{s: "int primary", fail: true},
-		{s: "int key", fail: true},
+		{
+			row: &struct {
+				Name  string
+				Field string `db:"novalue"`
+			}{},
+			ti: &typedTableInfo{
+				colNames: []types.Identifier{types.ID("name", true), types.ID("field", true)},
+				colTypes: []types.ColumnType{
+					{Type: types.StringType, Size: 1, NotNull: true},
+					{Type: types.StringType, Size: 1, NotNull: true},
+				},
+			},
+		},
+		{
+			row: sequencesRow{},
+			ti: &typedTableInfo{
+				colNames: []types.Identifier{
+					types.ID("sequence", true),
+					types.ID("current", true),
+				},
+				colTypes: []types.ColumnType{
+					{Type: types.StringType, Size: 128, NotNull: true},
+					{Type: types.Int64Type, Size: 8, NotNull: true},
+				},
+				primary: []types.ColumnKey{types.MakeColumnKey(0, false)},
+			},
+		},
+		{
+			row: &tablesRow{},
+			ti: &typedTableInfo{
+				colNames: []types.Identifier{
+					types.ID("database", true),
+					types.ID("schema", true),
+					types.ID("table", true),
+					types.ID("table_id", true),
+				},
+				colTypes: []types.ColumnType{
+					{Type: types.StringType, Size: 128, NotNull: true},
+					{Type: types.StringType, Size: 128, NotNull: true},
+					{Type: types.StringType, Size: 128, NotNull: true},
+					{Type: types.Int64Type, Size: 4, NotNull: true},
+				},
+				primary: []types.ColumnKey{
+					types.MakeColumnKey(0, false),
+					types.MakeColumnKey(1, false),
+					types.MakeColumnKey(2, false),
+				},
+			},
+		},
 	}
 
 	for _, c := range cases {
-		ct, primary, err := engine.ParseColumn(c.s)
-		_ = primary
-		if err != nil {
-			if !c.fail {
-				t.Errorf("ParseColumn(%s) failed with %s", c.s, err)
+		ti, panicked := typedTableInfoPanicked(func() *typedTableInfo {
+			return makeTypedTableInfo(c.row)
+		})
+		if panicked {
+			if !c.panicked {
+				t.Errorf("makeTypedTableInfo(%#v) panicked", c.row)
 			}
-		} else if c.fail {
-			t.Errorf("ParseColumn(%s) did not fail", c.s)
-		} else {
-			if ct != c.ct {
-				t.Errorf("ParseColumn(%s) ct: got %v want %v", c.s, ct, c.ct)
-			}
-			if primary != c.primary {
-				t.Errorf("ParseColumn(%s) primary: got %v want %v", c.s, primary, c.primary)
-			}
+		} else if c.panicked {
+			t.Errorf("makeTypedTableInfo(%#v) did not panic", c.row)
+		} else if !reflect.DeepEqual(ti, c.ti) {
+			t.Errorf("makeTypedTableInfo(%#v) got %#v want %#v", c.row, ti, c.ti)
 		}
 	}
 }
