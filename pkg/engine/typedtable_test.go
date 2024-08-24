@@ -4,10 +4,11 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/leftmike/maho/pkg/storage"
 	"github.com/leftmike/maho/pkg/types"
 )
 
-func typedTableInfoPanicked(fn func() *typedTableInfo) (ti *typedTableInfo, panicked bool) {
+func typedInfoPanicked(fn func() *typedInfo) (ti *typedInfo, panicked bool) {
 	defer func() {
 		if r := recover(); r != nil {
 			if _, ok := r.(string); ok {
@@ -22,13 +23,21 @@ func typedTableInfoPanicked(fn func() *typedTableInfo) (ti *typedTableInfo, pani
 }
 
 func TestMakeTypedTableInfo(t *testing.T) {
+	tn := types.TableName{
+		Database: types.ID("db", false),
+		Schema:   types.ID("scm", false),
+		Table:    types.ID("tbl", false),
+	}
+
 	cases := []struct {
+		tid      storage.TableId
+		tn       types.TableName
 		row      interface{}
-		ti       *typedTableInfo
+		ti       *typedInfo
 		panicked bool
 	}{
 		{row: 123, panicked: true},
-		{row: struct{}{}, ti: &typedTableInfo{}},
+		{row: struct{}{}, ti: &typedInfo{}},
 		{row: struct{ aBC int }{}, panicked: true},
 		{
 			row: struct {
@@ -50,6 +59,26 @@ func TestMakeTypedTableInfo(t *testing.T) {
 		},
 		{
 			row: struct {
+				Abc int `maho:"size=abc"`
+			}{},
+			panicked: true,
+		},
+		{
+			row: struct {
+				Abc []int16
+			}{},
+			panicked: true,
+		},
+		{
+			row: struct {
+				Abc [8]string
+			}{},
+			panicked: true,
+		},
+		{
+			tid: maxReservedTableId + 1,
+			tn:  tn,
+			row: struct {
 				ColNum   byte    `db:"name,primary=123"`
 				Database string  `maho:"size=123"`
 				Abcdef   *string `maho:"size=45,fixed"`
@@ -58,7 +87,9 @@ func TestMakeTypedTableInfo(t *testing.T) {
 				ABCDEF   *uint32
 				DefGHi   int16 `maho:"name=DEFGHI"`
 			}{},
-			ti: &typedTableInfo{
+			ti: &typedInfo{
+				tid: maxReservedTableId + 1,
+				tn:  tn,
 				colNames: []types.Identifier{
 					types.ID("col_num", true),
 					types.ID("database", true),
@@ -84,7 +115,7 @@ func TestMakeTypedTableInfo(t *testing.T) {
 				Name  string
 				Field string `db:"novalue"`
 			}{},
-			ti: &typedTableInfo{
+			ti: &typedInfo{
 				colNames: []types.Identifier{types.ID("name", true), types.ID("field", true)},
 				colTypes: []types.ColumnType{
 					{Type: types.StringType, Size: 1, NotNull: true},
@@ -94,7 +125,7 @@ func TestMakeTypedTableInfo(t *testing.T) {
 		},
 		{
 			row: sequencesRow{},
-			ti: &typedTableInfo{
+			ti: &typedInfo{
 				colNames: []types.Identifier{
 					types.ID("sequence", true),
 					types.ID("current", true),
@@ -108,7 +139,7 @@ func TestMakeTypedTableInfo(t *testing.T) {
 		},
 		{
 			row: &tablesRow{},
-			ti: &typedTableInfo{
+			ti: &typedInfo{
 				colNames: []types.Identifier{
 					types.ID("database", true),
 					types.ID("schema", true),
@@ -131,8 +162,8 @@ func TestMakeTypedTableInfo(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		ti, panicked := typedTableInfoPanicked(func() *typedTableInfo {
-			return makeTypedTableInfo(c.row)
+		ti, panicked := typedInfoPanicked(func() *typedInfo {
+			return makeTypedInfo(c.tid, c.tn, c.row)
 		})
 		if panicked {
 			if !c.panicked {

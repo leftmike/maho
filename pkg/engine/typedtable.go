@@ -13,7 +13,9 @@ import (
 	"github.com/leftmike/maho/pkg/types"
 )
 
-type typedTableInfo struct {
+type typedInfo struct {
+	tid      storage.TableId
+	tn       types.TableName
 	colNames []types.Identifier
 	colTypes []types.ColumnType
 	primary  []types.ColumnKey
@@ -89,16 +91,16 @@ func fieldTags(s string) map[string]string {
 	return tags
 }
 
-func makeTypedTableInfo(row interface{}) *typedTableInfo {
-	typ := reflect.TypeOf(row)
-	//val := reflect.ValueOf(row)
+func makeTypedInfo(tid storage.TableId, tn types.TableName, st interface{}) *typedInfo {
+	typ := reflect.TypeOf(st)
+	//val := reflect.ValueOf(st)
 	if typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()
 		//val = val.Elem()
 	}
 
 	if typ.Kind() != reflect.Struct {
-		panic(fmt.Sprintf("typed table: not a struct or a pointer to a struct: %T", row))
+		panic(fmt.Sprintf("typed table: not a struct or a pointer to a struct: %T", st))
 	}
 
 	var colNames []types.Identifier
@@ -174,7 +176,9 @@ func makeTypedTableInfo(row interface{}) *typedTableInfo {
 		}
 	}
 
-	return &typedTableInfo{
+	return &typedInfo{
+		tid:      tid,
+		tn:       tn,
 		colNames: colNames,
 		colTypes: colTypes,
 		primary:  primary,
@@ -183,27 +187,32 @@ func makeTypedTableInfo(row interface{}) *typedTableInfo {
 
 type typedTable struct {
 	tbl storage.Table
+	ti  *typedInfo
 }
 
 type typedRows struct {
 	rows storage.Rows
 }
 
-func openTypedTable(ctx context.Context, tx storage.Transaction, tid storage.TableId,
-	row interface{}) (*typedTable, error) {
+func openTypedTable(ctx context.Context, tx storage.Transaction, ti *typedInfo) (*typedTable,
+	error) {
 
-	// XXX
-	return nil, nil
+	tbl, err := tx.OpenTable(ctx, ti.tid)
+	if err != nil {
+		return nil, err
+	}
+
+	return &typedTable{
+		tbl: tbl,
+		ti:  ti,
+	}, nil
 }
 
-func createTypedTable(ctx context.Context, tx storage.Transaction, tid storage.TableId,
-	tn types.TableName, row interface{}) error {
-
-	// XXX
-	return nil
+func createTypedTable(ctx context.Context, tx storage.Transaction, ti *typedInfo) error {
+	return tx.CreateTable(ctx, ti.tid, ti.tn, ti.colNames, ti.colTypes, ti.primary)
 }
 
-func (tt *typedTable) rows(ctx context.Context, minRow, maxRow interface{},
+func (tt *typedTable) rows(ctx context.Context, minSt, maxSt interface{},
 	pred storage.Predicate) (*typedRows, error) {
 
 	// XXX
@@ -220,12 +229,12 @@ func (tt *typedTable) delete(ctx context.Context, rid storage.RowId) error {
 	return nil
 }
 
-func (tt *typedTable) insert(ctx context.Context, row interface{}) error {
+func (tt *typedTable) insert(ctx context.Context, st interface{}) error {
 	// XXX
 	return nil
 }
 
-func (tr *typedRows) next(ctx context.Context, row interface{}) error {
+func (tr *typedRows) next(ctx context.Context, st interface{}) error {
 	// XXX
 	return nil
 }

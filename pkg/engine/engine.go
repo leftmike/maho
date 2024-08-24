@@ -54,7 +54,7 @@ type IndexType struct {
 }
 
 type engine struct {
-	st storage.Store
+	store storage.Store
 }
 
 type transaction struct{}
@@ -64,15 +64,25 @@ const (
 	databasesTableId
 	schemasTableId
 	tablesTableId
-	columnsTableId
-	maxReservedTableId storage.TableId = 512
+	maxReservedTableId storage.TableId = 511
 )
 
-func NewEngine(st storage.Store) Engine {
+func NewEngine(store storage.Store) Engine {
 	return &engine{
-		st: st,
+		store: store,
 	}
 }
+
+var (
+	sequencesTableName = types.TableName{types.SYSTEM, types.INFO, types.SEQUENCES}
+	sequencesTypedInfo = makeTypedInfo(sequencesTableId, sequencesTableName, sequencesRow{})
+	databasesTableName = types.TableName{types.SYSTEM, types.INFO, types.DATABASES}
+	databasesTypedInfo = makeTypedInfo(databasesTableId, databasesTableName, databasesRow{})
+	schemasTableName   = types.TableName{types.SYSTEM, types.INFO, types.SCHEMAS}
+	schemasTypedInfo   = makeTypedInfo(schemasTableId, schemasTableName, schemasRow{})
+	tablesTableName    = types.TableName{types.SYSTEM, types.INFO, types.TABLES}
+	tablesTypedInfo    = makeTypedInfo(tablesTableId, tablesTableName, tablesRow{})
+)
 
 type sequencesRow struct {
 	Sequence string `maho:"size=128,primary"`
