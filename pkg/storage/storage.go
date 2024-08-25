@@ -55,8 +55,6 @@ type Int64Predicate interface {
 	Int64Pred(i types.Int64Value) bool
 }
 
-type RowId interface{}
-
 type Table interface {
 	TID() TableId
 	Name() types.TableName
@@ -71,13 +69,16 @@ type Table interface {
 
 	Rows(ctx context.Context, cols []types.ColumnNum, minRow, maxRow types.Row,
 		pred Predicate) (Rows, error)
-	Update(ctx context.Context, rid RowId, cols []types.ColumnNum, vals []types.Value) error
-	Delete(ctx context.Context, rid RowId) error
 	Insert(ctx context.Context, rows []types.Row) error
 }
 
 type Rows interface {
 	Next(ctx context.Context) (types.Row, error)
-	Current() (RowId, error)
+	Current() (RowRef, error)
 	Close(ctx context.Context) error
+}
+
+type RowRef interface {
+	Update(ctx context.Context, cols []types.ColumnNum, vals []types.Value) error
+	Delete(ctx context.Context) error
 }

@@ -50,7 +50,7 @@ func rowErrorPanicked(fn func() (types.Row, error)) (row types.Row, err error,
 	return
 }
 
-func rowIdErrorPanicked(fn func() (storage.RowId, error)) (rowId storage.RowId, err error,
+func rowRefErrorPanicked(fn func() (storage.RowRef, error)) (rowRef storage.RowRef, err error,
 	panicked bool) {
 
 	defer func() {
@@ -63,7 +63,7 @@ func rowIdErrorPanicked(fn func() (storage.RowId, error)) (rowId storage.RowId, 
 		}
 	}()
 
-	rowId, err = fn()
+	rowRef, err = fn()
 	panicked = false
 	return
 }
@@ -178,7 +178,7 @@ type UpdateSet struct {
 
 func selectFunc(t *testing.T, what string, tbl storage.Table, cols []types.ColumnNum,
 	minRow, maxRow types.Row, pred storage.Predicate,
-	fn func(rid storage.RowId, row types.Row)) {
+	fn func(rowRef storage.RowRef, row types.Row)) {
 
 	ctx := context.Background()
 
@@ -196,12 +196,12 @@ func selectFunc(t *testing.T, what string, tbl storage.Table, cols []types.Colum
 			t.Errorf("%s(%d).Next() failed with %s", what, tbl.TID(), err)
 			break
 		}
-		rid, err := rs.Current()
+		rowRef, err := rs.Current()
 		if err != nil {
 			t.Errorf("%s(%d).Current() failed with %s", what, tbl.TID(), err)
 			break
 		}
-		fn(rid, row)
+		fn(rowRef, row)
 	}
 
 	err = rs.Close(ctx)
@@ -216,7 +216,7 @@ func testStorage(t *testing.T, tx storage.Transaction, tbl storage.Table,
 	ctx := context.Background()
 
 	var rows storage.Rows
-	var rid storage.RowId
+	var rowRef storage.RowRef
 	var err error
 	for _, c := range cases {
 		switch c := c.(type) {
@@ -351,7 +351,7 @@ func testStorage(t *testing.T, tx storage.Transaction, tbl storage.Table,
 			}
 		case Update:
 			err, panicked := testutil.ErrorPanicked(func() error {
-				return tbl.Update(ctx, rid, c.cols, c.vals)
+				return rowRef.Update(ctx, c.cols, c.vals)
 			})
 			if panicked {
 				if !c.panicked {
@@ -368,7 +368,7 @@ func testStorage(t *testing.T, tx storage.Transaction, tbl storage.Table,
 			}
 		case Delete:
 			err, panicked := testutil.ErrorPanicked(func() error {
-				return tbl.Delete(ctx, rid)
+				return rowRef.Delete(ctx)
 			})
 			if panicked {
 				if !c.panicked {
@@ -419,7 +419,7 @@ func testStorage(t *testing.T, tx storage.Transaction, tbl storage.Table,
 			}
 		case Current:
 			var panicked bool
-			rid, err, panicked = rowIdErrorPanicked(func() (storage.RowId, error) {
+			rowRef, err, panicked = rowRefErrorPanicked(func() (storage.RowRef, error) {
 				return rows.Current()
 			})
 			if panicked {
@@ -455,7 +455,7 @@ func testStorage(t *testing.T, tx storage.Transaction, tbl storage.Table,
 		case Select:
 			var rows []types.Row
 			selectFunc(t, "Select", tbl, c.cols, c.minRow, c.maxRow, c.pred,
-				func(rid storage.RowId, row types.Row) {
+				func(rowRef storage.RowRef, row types.Row) {
 					rows = append(rows, row)
 				})
 
@@ -465,17 +465,17 @@ func testStorage(t *testing.T, tx storage.Transaction, tbl storage.Table,
 			}
 		case DeleteFrom:
 			selectFunc(t, "DeleteFrom", tbl, nil, c.minRow, c.maxRow, c.pred,
-				func(rid storage.RowId, row types.Row) {
-					err := tbl.Delete(ctx, rid)
+				func(rowRef storage.RowRef, row types.Row) {
+					err := rowRef.Delete(ctx)
 					if err != nil {
 						t.Errorf("DeleteFrom(%d).Delete() failed with %s", tbl.TID(), err)
 					}
 				})
 		case UpdateSet:
 			selectFunc(t, "UpdateSet", tbl, nil, c.minRow, c.maxRow, c.pred,
-				func(rid storage.RowId, row types.Row) {
+				func(rowRef storage.RowRef, row types.Row) {
 					cols, vals := c.update(row)
-					err := tbl.Update(ctx, rid, cols, vals)
+					err := rowRef.Update(ctx, cols, vals)
 					if err != nil {
 						t.Errorf("UpdateSet(%d).Update() failed with %s", tbl.TID(), err)
 					}

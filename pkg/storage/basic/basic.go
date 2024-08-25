@@ -51,6 +51,11 @@ type rows struct {
 	next  int
 }
 
+type rowRef struct {
+	tbl *table
+	key []byte
+}
+
 func NewStore(dataDir string) (storage.Store, error) {
 	return &store{
 		tree: newBTree(),
@@ -320,53 +325,6 @@ func (tbl *table) Rows(ctx context.Context, cols []types.ColumnNum, minRow, maxR
 	}, nil
 }
 
-func (tbl *table) Update(ctx context.Context, rid storage.RowId, cols []types.ColumnNum,
-	vals []types.Value) error {
-
-	if len(cols) != len(vals) {
-		panic(fmt.Sprintf("basic: table %d: update len(cols) != len(vals): %d %d", tbl.tid,
-			len(cols), len(vals)))
-	}
-
-	it, ok := tbl.tx.tree.Get(rowIdToItem(toRelationId(tbl.tid, primaryIndexId), rid))
-	if !ok {
-		panic(fmt.Sprintf("basic: table %d: missing item to update: %v", tbl.tid, rid))
-	}
-	row := append(make([]types.Value, 0, len(it.row)), it.row...)
-	for idx, col := range cols {
-		row[col] = vals[idx]
-	}
-
-	tbl.tx.forWrite()
-
-	if types.ColumnKeyUpdated(tbl.tt.Key, cols) {
-		err := tbl.Delete(ctx, rid)
-		if err != nil {
-			return err
-		}
-		err = tbl.Insert(ctx, []types.Row{row})
-		if err != nil {
-			return err
-		}
-	} else {
-		tbl.tx.tree.ReplaceOrInsert(
-			rowToItem(toRelationId(tbl.tid, primaryIndexId), tbl.tt.Key, row))
-	}
-
-	return nil
-}
-
-func (tbl *table) Delete(ctx context.Context, rid storage.RowId) error {
-	tbl.tx.forWrite()
-
-	_, ok := tbl.tx.tree.Delete(rowIdToItem(toRelationId(tbl.tid, primaryIndexId), rid))
-	if !ok {
-		panic(fmt.Sprintf("basic: table %d: missing item to delete: %v", tbl.tid, rid))
-	}
-
-	return nil
-}
-
 func (tbl *table) Insert(ctx context.Context, rows []types.Row) error {
 	tbl.tx.forWrite()
 
@@ -410,12 +368,15 @@ func (rs *rows) Next(ctx context.Context) (types.Row, error) {
 	return rs.items[rs.next-1].row, nil
 }
 
-func (rs *rows) Current() (storage.RowId, error) {
+func (rs *rows) Current() (storage.RowRef, error) {
 	if rs.next <= 0 {
 		panic(fmt.Sprintf("basic: missing current on rows for table %d", rs.tbl.tid))
 	}
 
-	return rs.items[rs.next-1].RowId(), nil
+	return rowRef{
+		tbl: rs.tbl,
+		key: rs.items[rs.next-1].Key(),
+	}, nil
 }
 
 func (rs *rows) Close(ctx context.Context) error {
@@ -425,5 +386,50 @@ func (rs *rows) Close(ctx context.Context) error {
 
 	rs.tbl.tx.rowsCount -= 1
 	rs.next = -1
+	return nil
+}
+
+func (rr rowRef) Update(ctx context.Context, cols []types.ColumnNum, vals []types.Value) error {
+	if len(cols) != len(vals) {
+		panic(fmt.Sprintf("basic: table %d: update len(cols) != len(vals): %d %d", rr.tbl.tid,
+			len(cols), len(vals)))
+	}
+
+	it, ok := rr.tbl.tx.tree.Get(keyToItem(toRelationId(rr.tbl.tid, primaryIndexId), rr.key))
+	if !ok {
+		panic(fmt.Sprintf("basic: table %d: missing item to update: %v", rr.tbl.tid, rr.key))
+	}
+	row := append(make([]types.Value, 0, len(it.row)), it.row...)
+	for idx, col := range cols {
+		row[col] = vals[idx]
+	}
+
+	rr.tbl.tx.forWrite()
+
+	if types.ColumnKeyUpdated(rr.tbl.tt.Key, cols) {
+		err := rr.Delete(ctx)
+		if err != nil {
+			return err
+		}
+		err = rr.tbl.Insert(ctx, []types.Row{row})
+		if err != nil {
+			return err
+		}
+	} else {
+		rr.tbl.tx.tree.ReplaceOrInsert(
+			rowToItem(toRelationId(rr.tbl.tid, primaryIndexId), rr.tbl.tt.Key, row))
+	}
+
+	return nil
+}
+
+func (rr rowRef) Delete(ctx context.Context) error {
+	rr.tbl.tx.forWrite()
+
+	_, ok := rr.tbl.tx.tree.Delete(keyToItem(toRelationId(rr.tbl.tid, primaryIndexId), rr.key))
+	if !ok {
+		panic(fmt.Sprintf("basic: table %d: missing item to delete: %v", rr.tbl.tid, rr.key))
+	}
+
 	return nil
 }

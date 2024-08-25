@@ -42,10 +42,10 @@ func rowToItem(rel relationId, rowKey []types.ColumnKey,
 	return it
 }
 
-func rowIdToItem(rel relationId, rid storage.RowId) item {
+func keyToItem(rel relationId, key []byte) item {
 	return item{
 		rel: rel,
-		key: rid.([]byte),
+		key: key,
 	}
 }
 
@@ -53,7 +53,7 @@ func (it item) String() string {
 	return fmt.Sprintf("%d:%d %v %s", it.rel>>32, it.rel&0xFFFFFFFF, it.key, it.row)
 }
 
-func (it item) RowId() storage.RowId {
+func (it item) Key() []byte {
 	return it.key
 }
 

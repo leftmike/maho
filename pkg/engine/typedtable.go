@@ -250,6 +250,12 @@ type typedTable struct {
 
 type typedRows struct {
 	rows storage.Rows
+	ti   *typedInfo
+}
+
+type typedRowRef struct {
+	rr storage.RowRef
+	ti *typedInfo
 }
 
 func openTypedTable(ctx context.Context, tx storage.Transaction, ti *typedInfo) (*typedTable,
@@ -277,16 +283,6 @@ func (tt *typedTable) rows(ctx context.Context, minSt, maxSt interface{},
 	return nil, nil
 }
 
-func (tt *typedTable) update(ctx context.Context, rid storage.RowId, update interface{}) error {
-	// XXX
-	return nil
-}
-
-func (tt *typedTable) delete(ctx context.Context, rid storage.RowId) error {
-	// XXX
-	return nil
-}
-
 func (tt *typedTable) insert(ctx context.Context, st interface{}) error {
 	return tt.tbl.Insert(ctx, []types.Row{tt.ti.structToRow(st)})
 }
@@ -296,12 +292,30 @@ func (tr *typedRows) next(ctx context.Context, st interface{}) error {
 	return nil
 }
 
-func (tr *typedRows) current() (storage.RowId, error) {
-	return tr.rows.Current()
+func (tr *typedRows) current() (*typedRowRef, error) {
+	rr, err := tr.rows.Current()
+	if err != nil {
+		return nil, err
+	}
+
+	return &typedRowRef{
+		rr: rr,
+		ti: tr.ti,
+	}, nil
 }
 
 func (tr *typedRows) close(ctx context.Context) error {
 	err := tr.rows.Close(ctx)
 	tr.rows = nil
 	return err
+}
+
+func (trr *typedRowRef) update(ctx context.Context, update interface{}) error {
+	// XXX
+	return nil
+}
+
+func (trr *typedRowRef) delete(ctx context.Context) error {
+	// XXX
+	return nil
 }

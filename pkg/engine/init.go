@@ -33,6 +33,7 @@ func Init(store storage.Store) (err error) {
 	if err != nil {
 		return err
 	}
-	// XXX
+
+	// XXX: insert data for sequences, databases, schemas, and tables table
 	return nil
 }
