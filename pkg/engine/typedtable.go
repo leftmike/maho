@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode"
@@ -14,6 +15,7 @@ import (
 )
 
 type typedInfo struct {
+	typ      reflect.Type
 	tid      storage.TableId
 	tn       types.TableName
 	colNames []types.Identifier
@@ -177,12 +179,68 @@ func makeTypedInfo(tid storage.TableId, tn types.TableName, st interface{}) *typ
 	}
 
 	return &typedInfo{
+		typ:      typ,
 		tid:      tid,
 		tn:       tn,
 		colNames: colNames,
 		colTypes: colTypes,
 		primary:  primary,
 	}
+}
+
+func (ti *typedInfo) structToRow(st interface{}) types.Row {
+	typ := reflect.TypeOf(st)
+	if typ.Kind() != reflect.Pointer {
+		panic(fmt.Sprintf("typed table: must be pointer to a struct; got %v", st))
+	}
+
+	typ = typ.Elem()
+	val := reflect.ValueOf(st).Elem()
+	if typ != ti.typ {
+		panic(fmt.Sprintf("typed table: bad struct type: %s %s", typ, ti.typ))
+	}
+
+	row := make(types.Row, len(ti.colTypes))
+	for cdx, ct := range ti.colTypes {
+		fval := val.Field(cdx)
+		if !ct.NotNull {
+			if fval.IsNil() {
+				continue
+			}
+			fval = fval.Elem()
+		}
+
+		switch ct.Type {
+		case types.BoolType:
+			row[cdx] = types.BoolValue(fval.Bool())
+		case types.StringType:
+			s := fval.String()
+			if (ct.Fixed && len(s) != int(ct.Size)) || (!ct.Fixed && len(s) > int(ct.Size)) {
+				panic(fmt.Sprintf("typed table: bad string value: %v %d: %d", ct.Fixed, ct.Size,
+					len(s)))
+			}
+			row[cdx] = types.StringValue(s)
+		case types.BytesType:
+			b := fval.Bytes()
+			if (ct.Fixed && len(b) != int(ct.Size)) || (!ct.Fixed && len(b) > int(ct.Size)) {
+				panic(fmt.Sprintf("typed table: bad bytes value: %v %d: %d", ct.Fixed, ct.Size,
+					len(b)))
+			}
+			row[cdx] = types.BytesValue(slices.Clone(b))
+		case types.Float64Type:
+			row[cdx] = types.Float64Value(fval.Float())
+		case types.Int64Type:
+			if fval.CanInt() {
+				row[cdx] = types.Int64Value(fval.Int())
+			} else {
+				row[cdx] = types.Int64Value(fval.Uint())
+			}
+		default:
+			panic(fmt.Sprintf("unexpected column type: %#v %d", ct, ct.Type))
+		}
+	}
+
+	return row
 }
 
 type typedTable struct {
@@ -230,8 +288,7 @@ func (tt *typedTable) delete(ctx context.Context, rid storage.RowId) error {
 }
 
 func (tt *typedTable) insert(ctx context.Context, st interface{}) error {
-	// XXX
-	return nil
+	return tt.tbl.Insert(ctx, []types.Row{tt.ti.structToRow(st)})
 }
 
 func (tr *typedRows) next(ctx context.Context, st interface{}) error {

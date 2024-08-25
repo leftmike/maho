@@ -64,6 +64,7 @@ const (
 	databasesTableId
 	schemasTableId
 	tablesTableId
+
 	maxReservedTableId storage.TableId = 511
 )
 

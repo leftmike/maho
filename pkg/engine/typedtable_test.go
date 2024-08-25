@@ -1,10 +1,14 @@
 package engine
 
 import (
+	"context"
+	"io"
 	"reflect"
 	"testing"
 
 	"github.com/leftmike/maho/pkg/storage"
+	"github.com/leftmike/maho/pkg/storage/basic"
+	u "github.com/leftmike/maho/pkg/testutil"
 	"github.com/leftmike/maho/pkg/types"
 )
 
@@ -20,6 +24,39 @@ func typedInfoPanicked(fn func() *typedInfo) (ti *typedInfo, panicked bool) {
 	}()
 
 	return fn(), false
+}
+
+func allRows(t *testing.T, tx storage.Transaction, tid storage.TableId) []types.Row {
+	t.Helper()
+
+	ctx := context.Background()
+	tbl, err := tx.OpenTable(ctx, tid)
+	if err != nil {
+		t.Fatalf("OpenTable(%d) failed with %s", tid, err)
+	}
+	rows, err := tbl.Rows(ctx, nil, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("Rows(%d) failed with %s", tid, err)
+	}
+
+	var all []types.Row
+	for {
+		row, err := rows.Next(ctx)
+		if err == io.EOF {
+			break
+		} else if err != nil {
+			t.Fatalf("Next(%d) failed with %s", tid, err)
+		}
+
+		all = append(all, row)
+	}
+
+	err = rows.Close(ctx)
+	if err != nil {
+		t.Fatalf("Close(%d) failed with %s", tid, err)
+	}
+
+	return all
 }
 
 func TestMakeTypedTableInfo(t *testing.T) {
@@ -171,8 +208,98 @@ func TestMakeTypedTableInfo(t *testing.T) {
 			}
 		} else if c.panicked {
 			t.Errorf("makeTypedTableInfo(%#v) did not panic", c.row)
-		} else if !reflect.DeepEqual(ti, c.ti) {
-			t.Errorf("makeTypedTableInfo(%#v) got %#v want %#v", c.row, ti, c.ti)
+		} else {
+			ti.typ = nil
+
+			if !reflect.DeepEqual(ti, c.ti) {
+				t.Errorf("makeTypedTableInfo(%#v) got %#v want %#v", c.row, ti, c.ti)
+			}
 		}
+	}
+}
+
+func TestTypedInsert(t *testing.T) {
+	s2 := "xyz"
+	i2 := int64(1234)
+
+	structs := []struct {
+		Col0 int `maho:"primary"`
+		Col1 bool
+		Col2 string  `maho:"size=64"`
+		Col3 *string `maho:"size=3,fixed"`
+		Col4 []byte  `maho:"size=32"`
+		Col5 [4]byte
+		Col6 float64
+		Col7 byte
+		Col8 *int64
+	}{
+		{Col0: 0},
+		{
+			Col0: 1,
+			Col1: true,
+			Col2: "abcdef",
+			Col4: []byte{0, 1, 2},
+			Col5: [4]byte{3, 4, 5, 6},
+			Col6: 123.456,
+			Col7: 78,
+		},
+		{
+			Col0: 2,
+			Col3: &s2,
+			Col8: &i2,
+		},
+	}
+
+	rows := []types.Row{
+		{u.I(0), u.B(false), u.S(""), nil, u.Bytes(), u.Bytes(0, 0, 0, 0), u.F(0), u.I(0), nil},
+		{u.I(1), u.B(true), u.S("abcdef"), nil, u.Bytes(0, 1, 2), u.Bytes(3, 4, 5, 6),
+			u.F(123.456), u.I(78), nil},
+		{u.I(2), u.B(false), u.S(""), u.S("xyz"), u.Bytes(), u.Bytes(0, 0, 0, 0), u.F(0), u.I(0),
+			u.I(1234)},
+	}
+
+	tid := maxReservedTableId + 1
+	tn := types.TableName{types.ID("d", false), types.ID("s", false), types.ID("t", false)}
+	ti := makeTypedInfo(tid, tn, structs[0])
+
+	dataDir := t.TempDir()
+	store, err := basic.NewStore(dataDir)
+	if err != nil {
+		t.Fatalf("NewStore(%s) failed with %s", dataDir, err)
+	}
+
+	ctx := context.Background()
+	tx := store.Begin()
+	err = createTypedTable(ctx, tx, ti)
+	if err != nil {
+		t.Fatalf("createTypedTable(%s) failed with %s", tn, err)
+	}
+
+	tt, err := openTypedTable(ctx, tx, ti)
+	if err != nil {
+		t.Fatalf("openTypedTable(%s) failed with %s", tn, err)
+	}
+
+	for _, st := range structs {
+		err = tt.insert(ctx, &st)
+		if err != nil {
+			t.Errorf("insert(%#v) failed with %s", st, err)
+		}
+	}
+
+	err = tx.Commit(ctx)
+	if err != nil {
+		t.Fatalf("Commit() failed with %s", err)
+	}
+
+	tx = store.Begin()
+	all := allRows(t, tx, tid)
+	err = tx.Commit(ctx)
+	if err != nil {
+		t.Fatalf("Commit() failed with %s", err)
+	}
+
+	if !u.RowsEqual(rows, all, true) {
+		t.Errorf("Rows(%d) got %v want %v", tid, all, rows)
 	}
 }
