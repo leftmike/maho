@@ -283,8 +283,13 @@ func (tt *typedTable) rows(ctx context.Context, minSt, maxSt interface{},
 	return nil, nil
 }
 
-func (tt *typedTable) insert(ctx context.Context, st interface{}) error {
-	return tt.tbl.Insert(ctx, []types.Row{tt.ti.structToRow(st)})
+func (tt *typedTable) insert(ctx context.Context, structs ...interface{}) error {
+	var rows []types.Row
+	for _, st := range structs {
+		rows = append(rows, tt.ti.structToRow(st))
+	}
+
+	return tt.tbl.Insert(ctx, rows)
 }
 
 func (tr *typedRows) next(ctx context.Context, st interface{}) error {

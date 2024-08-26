@@ -104,6 +104,7 @@ type tablesRow struct {
 	Schema   string `maho:"size=128,primary"`
 	Table    string `maho:"size=128,primary"`
 	TableID  storage.TableId
+	//Columns  []byte
 }
 
 func (eng *engine) CreateDatabase(dn types.Identifier, opts storage.OptionsMap) error {
