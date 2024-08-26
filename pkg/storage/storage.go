@@ -10,6 +10,8 @@ type OptionsMap map[types.Identifier]string
 
 type Store interface {
 	Name() string
+	SetupColumns(colNames []types.Identifier, colTypes []types.ColumnType,
+		primary []types.ColumnKey) ([]types.Identifier, []types.ColumnType, []types.ColumnKey)
 	Begin() Transaction
 }
 
@@ -21,7 +23,9 @@ const (
 )
 
 type Transaction interface {
-	OpenTable(ctx context.Context, tid TableId) (Table, error)
+	Store() Store
+	OpenTable(ctx context.Context, tid TableId, tn types.TableName, colNames []types.Identifier,
+		colTypes []types.ColumnType, primary []types.ColumnKey) (Table, error)
 	CreateTable(ctx context.Context, tid TableId, tn types.TableName,
 		colNames []types.Identifier, colTypes []types.ColumnType, primary []types.ColumnKey) error
 	DropTable(ctx context.Context, tid TableId) error

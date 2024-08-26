@@ -78,6 +78,9 @@ func tableName(tid storage.TableId) types.TableName {
 
 type OpenTable struct {
 	tid      storage.TableId
+	colNames []types.Identifier
+	colTypes []types.ColumnType
+	primary  []types.ColumnKey
 	panicked bool
 }
 
@@ -180,6 +183,8 @@ func selectFunc(t *testing.T, what string, tbl storage.Table, cols []types.Colum
 	minRow, maxRow types.Row, pred storage.Predicate,
 	fn func(rowRef storage.RowRef, row types.Row)) {
 
+	t.Helper()
+
 	ctx := context.Background()
 
 	rs, err := tbl.Rows(ctx, cols, minRow, maxRow, pred)
@@ -213,6 +218,8 @@ func selectFunc(t *testing.T, what string, tbl storage.Table, cols []types.Colum
 func testStorage(t *testing.T, tx storage.Transaction, tbl storage.Table,
 	cases []interface{}) storage.Table {
 
+	t.Helper()
+
 	ctx := context.Background()
 
 	var rows storage.Rows
@@ -223,7 +230,9 @@ func testStorage(t *testing.T, tx storage.Transaction, tbl storage.Table,
 		case OpenTable:
 			var panicked bool
 			tbl, err, panicked = tableErrorPanicked(func() (storage.Table, error) {
-				return tx.OpenTable(ctx, c.tid)
+				colNames, colTypes, primary := tx.Store().SetupColumns(c.colNames, c.colTypes,
+					c.primary)
+				return tx.OpenTable(ctx, c.tid, tableName(c.tid), colNames, colTypes, primary)
 			})
 			if panicked {
 				if !c.panicked {
@@ -237,7 +246,9 @@ func testStorage(t *testing.T, tx storage.Transaction, tbl storage.Table,
 		case CreateTable:
 			tn := tableName(c.tid)
 			err, panicked := testutil.ErrorPanicked(func() error {
-				return tx.CreateTable(ctx, c.tid, tn, c.colNames, c.colTypes, c.primary)
+				colNames, colTypes, primary := tx.Store().SetupColumns(c.colNames, c.colTypes,
+					c.primary)
+				return tx.CreateTable(ctx, c.tid, tn, colNames, colTypes, primary)
 			})
 			if panicked {
 				if !c.panicked {
@@ -277,30 +288,16 @@ func testStorage(t *testing.T, tx storage.Transaction, tbl storage.Table,
 				t.Errorf("%d.Version() got %d want %d", c.tid, ver, c.ver)
 			}
 
-			cn := tbl.ColumnNames()
-			ct := tbl.ColumnTypes()
-			if c.key == nil {
-				for {
-					if len(cn) == 0 || cn[0] != 0 {
-						break
-					}
-
-					cn = cn[1:]
-					ct = ct[1:]
-				}
+			colNames, colTypes, key := tx.Store().SetupColumns(c.colNames, c.colTypes,
+				c.key)
+			if !reflect.DeepEqual(tbl.ColumnNames(), colNames) {
+				t.Errorf("%d.ColumnNames() got %#v want %#v", c.tid, tbl.ColumnNames(), colNames)
 			}
-
-			if !reflect.DeepEqual(cn, c.colNames) {
-				t.Errorf("%d.ColumnNames() got %#v want %#v", c.tid, cn, c.colNames)
+			if !reflect.DeepEqual(tbl.ColumnTypes(), colTypes) {
+				t.Errorf("%d.ColumnTypes() got %#v want %#v", c.tid, tbl.ColumnTypes(), colTypes)
 			}
-			if !reflect.DeepEqual(ct, c.colTypes) {
-				t.Errorf("%d.ColumnTypes() got %#v want %#v", c.tid, ct, c.colTypes)
-			}
-			if c.key != nil {
-				key := tbl.Key()
-				if !reflect.DeepEqual(key, c.key) {
-					t.Errorf("%d.Key() got %#v want %#v", c.tid, key, c.key)
-				}
+			if !reflect.DeepEqual(tbl.Key(), key) {
+				t.Errorf("%d.Key() got %#v want %#v", c.tid, tbl.Key(), key)
 			}
 		case Commit:
 			err, panicked := testutil.ErrorPanicked(func() error {

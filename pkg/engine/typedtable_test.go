@@ -26,17 +26,17 @@ func typedInfoPanicked(fn func() *typedInfo) (ti *typedInfo, panicked bool) {
 	return fn(), false
 }
 
-func allRows(t *testing.T, tx storage.Transaction, tid storage.TableId) []types.Row {
+func allRows(t *testing.T, tx storage.Transaction, ti *typedInfo) []types.Row {
 	t.Helper()
 
 	ctx := context.Background()
-	tbl, err := tx.OpenTable(ctx, tid)
+	tbl, err := tx.OpenTable(ctx, ti.tid, ti.tn, ti.colNames, ti.colTypes, ti.primary)
 	if err != nil {
-		t.Fatalf("OpenTable(%d) failed with %s", tid, err)
+		t.Fatalf("OpenTable(%d) failed with %s", ti.tid, err)
 	}
 	rows, err := tbl.Rows(ctx, nil, nil, nil, nil)
 	if err != nil {
-		t.Fatalf("Rows(%d) failed with %s", tid, err)
+		t.Fatalf("Rows(%d) failed with %s", ti.tid, err)
 	}
 
 	var all []types.Row
@@ -45,7 +45,7 @@ func allRows(t *testing.T, tx storage.Transaction, tid storage.TableId) []types.
 		if err == io.EOF {
 			break
 		} else if err != nil {
-			t.Fatalf("Next(%d) failed with %s", tid, err)
+			t.Fatalf("Next(%d) failed with %s", ti.tid, err)
 		}
 
 		all = append(all, row)
@@ -53,7 +53,7 @@ func allRows(t *testing.T, tx storage.Transaction, tid storage.TableId) []types.
 
 	err = rows.Close(ctx)
 	if err != nil {
-		t.Fatalf("Close(%d) failed with %s", tid, err)
+		t.Fatalf("Close(%d) failed with %s", ti.tid, err)
 	}
 
 	return all
@@ -293,7 +293,7 @@ func TestTypedInsert(t *testing.T) {
 	}
 
 	tx = store.Begin()
-	all := allRows(t, tx, tid)
+	all := allRows(t, tx, ti)
 	err = tx.Commit(ctx)
 	if err != nil {
 		t.Fatalf("Commit() failed with %s", err)

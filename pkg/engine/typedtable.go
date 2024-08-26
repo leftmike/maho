@@ -261,7 +261,7 @@ type typedRowRef struct {
 func openTypedTable(ctx context.Context, tx storage.Transaction, ti *typedInfo) (*typedTable,
 	error) {
 
-	tbl, err := tx.OpenTable(ctx, ti.tid)
+	tbl, err := tx.OpenTable(ctx, ti.tid, ti.tn, ti.colNames, ti.colTypes, ti.primary)
 	if err != nil {
 		return nil, err
 	}

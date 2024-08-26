@@ -19,8 +19,6 @@ var (
 )
 
 func TestCreateTable(t *testing.T, store string, newStore NewStore) {
-	t.Helper()
-
 	st, err := newStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("%s.NewStore() failed with %s", store, err)
@@ -41,7 +39,10 @@ func TestCreateTable(t *testing.T, store string, newStore NewStore) {
 			primary:  primary1,
 		},
 		OpenTable{
-			tid: storage.EngineTableId + 1,
+			tid:      storage.EngineTableId + 1,
+			colNames: colNames1,
+			colTypes: colTypes1,
+			primary:  primary1,
 		},
 		TableType{
 			tid:      storage.EngineTableId + 1,
@@ -55,7 +56,10 @@ func TestCreateTable(t *testing.T, store string, newStore NewStore) {
 
 	testStorage(t, st.Begin(), nil, []interface{}{
 		OpenTable{
-			tid: storage.EngineTableId + 1,
+			tid:      storage.EngineTableId + 1,
+			colNames: colNames1,
+			colTypes: colTypes1,
+			primary:  primary1,
 		},
 		TableType{
 			tid:      storage.EngineTableId + 1,
@@ -86,7 +90,10 @@ func TestCreateTable(t *testing.T, store string, newStore NewStore) {
 			panicked: true,
 		},
 		OpenTable{
-			tid: storage.EngineTableId + 1,
+			tid:      storage.EngineTableId + 1,
+			colNames: colNames1,
+			colTypes: colTypes1,
+			primary:  primary1,
 		},
 		TableType{
 			tid:      storage.EngineTableId + 1,
@@ -110,7 +117,10 @@ func TestCreateTable(t *testing.T, store string, newStore NewStore) {
 
 	testStorage(t, st.Begin(), nil, []interface{}{
 		OpenTable{
-			tid: storage.EngineTableId + 1,
+			tid:      storage.EngineTableId + 1,
+			colNames: colNames1,
+			colTypes: colTypes1,
+			primary:  primary1,
 		},
 		TableType{
 			tid:      storage.EngineTableId + 1,
@@ -120,7 +130,10 @@ func TestCreateTable(t *testing.T, store string, newStore NewStore) {
 			key:      primary1,
 		},
 		OpenTable{
-			tid: storage.EngineTableId + 2,
+			tid:      storage.EngineTableId + 2,
+			colNames: colNames2,
+			colTypes: colTypes2,
+			primary:  primary2,
 		},
 		TableType{
 			tid:      storage.EngineTableId + 2,
@@ -162,7 +175,9 @@ func TestCreateTable(t *testing.T, store string, newStore NewStore) {
 			colTypes: colTypes5,
 		},
 		OpenTable{
-			tid: storage.EngineTableId + 5,
+			tid:      storage.EngineTableId + 5,
+			colNames: colNames5,
+			colTypes: colTypes5,
 		},
 		TableType{
 			tid:      storage.EngineTableId + 5,
@@ -175,8 +190,6 @@ func TestCreateTable(t *testing.T, store string, newStore NewStore) {
 }
 
 func TestDropTable(t *testing.T, store string, newStore NewStore) {
-	t.Helper()
-
 	st, err := newStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("%s.NewStore() failed with %s", store, err)
@@ -197,7 +210,10 @@ func TestDropTable(t *testing.T, store string, newStore NewStore) {
 			primary:  primary,
 		},
 		OpenTable{
-			tid: storage.EngineTableId + 1,
+			tid:      storage.EngineTableId + 1,
+			colNames: colNames,
+			colTypes: colTypes,
+			primary:  primary,
 		},
 		CreateTable{
 			tid:      storage.EngineTableId + 2,
@@ -206,14 +222,20 @@ func TestDropTable(t *testing.T, store string, newStore NewStore) {
 			primary:  primary,
 		},
 		OpenTable{
-			tid: storage.EngineTableId + 2,
+			tid:      storage.EngineTableId + 2,
+			colNames: colNames,
+			colTypes: colTypes,
+			primary:  primary,
 		},
 		Commit{},
 	})
 
 	testStorage(t, st.Begin(), nil, []interface{}{
 		OpenTable{
-			tid: storage.EngineTableId + 1,
+			tid:      storage.EngineTableId + 1,
+			colNames: colNames,
+			colTypes: colTypes,
+			primary:  primary,
 		},
 		DropTable{
 			tid: storage.EngineTableId + 1,
@@ -227,7 +249,10 @@ func TestDropTable(t *testing.T, store string, newStore NewStore) {
 
 	testStorage(t, st.Begin(), nil, []interface{}{
 		OpenTable{
-			tid: storage.EngineTableId + 1,
+			tid:      storage.EngineTableId + 1,
+			colNames: colNames,
+			colTypes: colTypes,
+			primary:  primary,
 		},
 		DropTable{
 			tid: storage.EngineTableId + 1,
@@ -245,15 +270,16 @@ func TestDropTable(t *testing.T, store string, newStore NewStore) {
 			panicked: true,
 		},
 		OpenTable{
-			tid: storage.EngineTableId + 2,
+			tid:      storage.EngineTableId + 2,
+			colNames: colNames,
+			colTypes: colTypes,
+			primary:  primary,
 		},
 		Rollback{},
 	})
 }
 
 func TestInsert(t *testing.T, store string, newStore NewStore) {
-	t.Helper()
-
 	st, err := newStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("%s.NewStore() failed with %s", store, err)
@@ -280,7 +306,10 @@ func TestInsert(t *testing.T, store string, newStore NewStore) {
 
 	testStorage(t, st.Begin(), nil, []interface{}{
 		OpenTable{
-			tid: storage.EngineTableId + 1,
+			tid:      storage.EngineTableId + 1,
+			colNames: colNames,
+			colTypes: colTypes,
+			primary:  primary,
 		},
 		Insert{
 			rows: testutil.MustParseRows(`
@@ -293,7 +322,10 @@ func TestInsert(t *testing.T, store string, newStore NewStore) {
 
 	testStorage(t, st.Begin(), nil, []interface{}{
 		OpenTable{
-			tid: storage.EngineTableId + 1,
+			tid:      storage.EngineTableId + 1,
+			colNames: colNames,
+			colTypes: colTypes,
+			primary:  primary,
 		},
 		Select{
 			rows: testutil.MustParseRows(`
@@ -307,7 +339,10 @@ func TestInsert(t *testing.T, store string, newStore NewStore) {
 
 	testStorage(t, st.Begin(), nil, []interface{}{
 		OpenTable{
-			tid: storage.EngineTableId + 1,
+			tid:      storage.EngineTableId + 1,
+			colNames: colNames,
+			colTypes: colTypes,
+			primary:  primary,
 		},
 		Insert{
 			rows: testutil.MustParseRows(`
@@ -319,7 +354,10 @@ func TestInsert(t *testing.T, store string, newStore NewStore) {
 
 	testStorage(t, st.Begin(), nil, []interface{}{
 		OpenTable{
-			tid: storage.EngineTableId + 1,
+			tid:      storage.EngineTableId + 1,
+			colNames: colNames,
+			colTypes: colTypes,
+			primary:  primary,
 		},
 		Insert{
 			rows: testutil.MustParseRows(`
@@ -331,7 +369,10 @@ func TestInsert(t *testing.T, store string, newStore NewStore) {
 
 	testStorage(t, st.Begin(), nil, []interface{}{
 		OpenTable{
-			tid: storage.EngineTableId + 1,
+			tid:      storage.EngineTableId + 1,
+			colNames: colNames,
+			colTypes: colTypes,
+			primary:  primary,
 		},
 		Select{
 			rows: testutil.MustParseRows(`
@@ -378,8 +419,6 @@ func (pf predicateFunc) Int64Pred(i types.Int64Value) bool {
 }
 
 func TestRows(t *testing.T, store string, newStore NewStore) {
-	t.Helper()
-
 	st, err := newStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("%s.NewStore() failed with %s", store, err)
@@ -406,7 +445,10 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 
 	testStorage(t, st.Begin(), nil, []interface{}{
 		OpenTable{
-			tid: storage.EngineTableId + 1,
+			tid:      storage.EngineTableId + 1,
+			colNames: colNames1,
+			colTypes: colTypes1,
+			primary:  primary1,
 		},
 		Insert{
 			rows: testutil.MustParseRows(`
@@ -422,7 +464,10 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 
 	testStorage(t, st.Begin(), nil, []interface{}{
 		OpenTable{
-			tid: storage.EngineTableId + 1,
+			tid:      storage.EngineTableId + 1,
+			colNames: colNames1,
+			colTypes: colTypes1,
+			primary:  primary1,
 		},
 		Rows{},
 		Next{row: testutil.MustParseRow("(0, 0, 0, 'zero')")},
@@ -442,7 +487,10 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 
 	testStorage(t, st.Begin(), nil, []interface{}{
 		OpenTable{
-			tid: storage.EngineTableId + 1,
+			tid:      storage.EngineTableId + 1,
+			colNames: colNames1,
+			colTypes: colTypes1,
+			primary:  primary1,
 		},
 		Rows{},
 		Current{
@@ -454,7 +502,10 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 
 	testStorage(t, st.Begin(), nil, []interface{}{
 		OpenTable{
-			tid: storage.EngineTableId + 1,
+			tid:      storage.EngineTableId + 1,
+			colNames: colNames1,
+			colTypes: colTypes1,
+			primary:  primary1,
 		},
 		Rows{},
 		Next{row: testutil.MustParseRow("(0, 0, 0, 'zero')")},
@@ -467,7 +518,10 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 
 	testStorage(t, st.Begin(), nil, []interface{}{
 		OpenTable{
-			tid: storage.EngineTableId + 1,
+			tid:      storage.EngineTableId + 1,
+			colNames: colNames1,
+			colTypes: colTypes1,
+			primary:  primary1,
 		},
 		Rows{},
 		Next{row: testutil.MustParseRow("(0, 0, 0, 'zero')")},
@@ -481,7 +535,10 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 
 	testStorage(t, st.Begin(), nil, []interface{}{
 		OpenTable{
-			tid: storage.EngineTableId + 1,
+			tid:      storage.EngineTableId + 1,
+			colNames: colNames1,
+			colTypes: colTypes1,
+			primary:  primary1,
 		},
 		Rows{},
 		Next{row: testutil.MustParseRow("(0, 0, 0, 'zero')")},
@@ -494,7 +551,10 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 
 	testStorage(t, st.Begin(), nil, []interface{}{
 		OpenTable{
-			tid: storage.EngineTableId + 1,
+			tid:      storage.EngineTableId + 1,
+			colNames: colNames1,
+			colTypes: colTypes1,
+			primary:  primary1,
 		},
 		Rows{},
 		Next{row: testutil.MustParseRow("(0, 0, 0, 'zero')")},
@@ -507,7 +567,10 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 
 	testStorage(t, st.Begin(), nil, []interface{}{
 		OpenTable{
-			tid: storage.EngineTableId + 1,
+			tid:      storage.EngineTableId + 1,
+			colNames: colNames1,
+			colTypes: colTypes1,
+			primary:  primary1,
 		},
 		Rows{},
 		Next{row: testutil.MustParseRow("(0, 0, 0, 'zero')")},
@@ -520,7 +583,10 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 
 	testStorage(t, st.Begin(), nil, []interface{}{
 		OpenTable{
-			tid: storage.EngineTableId + 1,
+			tid:      storage.EngineTableId + 1,
+			colNames: colNames1,
+			colTypes: colTypes1,
+			primary:  primary1,
 		},
 		Select{
 			minRow: testutil.MustParseRow("(6, 0, 0, '')"),
@@ -534,7 +600,10 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 
 	testStorage(t, st.Begin(), nil, []interface{}{
 		OpenTable{
-			tid: storage.EngineTableId + 1,
+			tid:      storage.EngineTableId + 1,
+			colNames: colNames1,
+			colTypes: colTypes1,
+			primary:  primary1,
 		},
 		Select{
 			maxRow: testutil.MustParseRow("(4, 0, 0, '')"),
@@ -548,7 +617,10 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 
 	testStorage(t, st.Begin(), nil, []interface{}{
 		OpenTable{
-			tid: storage.EngineTableId + 1,
+			tid:      storage.EngineTableId + 1,
+			colNames: colNames1,
+			colTypes: colTypes1,
+			primary:  primary1,
 		},
 		Select{
 			minRow: testutil.MustParseRow("(4, 0, 0, '')"),
@@ -563,7 +635,10 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 
 	testStorage(t, st.Begin(), nil, []interface{}{
 		OpenTable{
-			tid: storage.EngineTableId + 1,
+			tid:      storage.EngineTableId + 1,
+			colNames: colNames1,
+			colTypes: colTypes1,
+			primary:  primary1,
 		},
 		Select{
 			minRow: testutil.MustParseRow("(3, 0, 0, '')"),
@@ -578,7 +653,10 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 
 	testStorage(t, st.Begin(), nil, []interface{}{
 		OpenTable{
-			tid: storage.EngineTableId + 1,
+			tid:      storage.EngineTableId + 1,
+			colNames: colNames1,
+			colTypes: colTypes1,
+			primary:  primary1,
 		},
 		Select{
 			cols: []types.ColumnNum{3, 1},
@@ -595,7 +673,10 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 
 	testStorage(t, st.Begin(), nil, []interface{}{
 		OpenTable{
-			tid: storage.EngineTableId + 1,
+			tid:      storage.EngineTableId + 1,
+			colNames: colNames1,
+			colTypes: colTypes1,
+			primary:  primary1,
 		},
 		Select{
 			cols:   []types.ColumnNum{3, 1},
@@ -629,7 +710,10 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 
 	testStorage(t, st.Begin(), nil, []interface{}{
 		OpenTable{
-			tid: storage.EngineTableId + 2,
+			tid:      storage.EngineTableId + 2,
+			colNames: colNames2,
+			colTypes: colTypes2,
+			primary:  primary2,
 		},
 		Insert{
 			rows: testutil.MustParseRows(`
@@ -646,7 +730,10 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 
 	testStorage(t, st.Begin(), nil, []interface{}{
 		OpenTable{
-			tid: storage.EngineTableId + 2,
+			tid:      storage.EngineTableId + 2,
+			colNames: colNames2,
+			colTypes: colTypes2,
+			primary:  primary2,
 		},
 		Select{
 			rows: testutil.MustParseRows(`
@@ -662,7 +749,10 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 
 	testStorage(t, st.Begin(), nil, []interface{}{
 		OpenTable{
-			tid: storage.EngineTableId + 2,
+			tid:      storage.EngineTableId + 2,
+			colNames: colNames2,
+			colTypes: colTypes2,
+			primary:  primary2,
 		},
 		Select{
 			pred: predicateFunc{
@@ -679,7 +769,10 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 
 	testStorage(t, st.Begin(), nil, []interface{}{
 		OpenTable{
-			tid: storage.EngineTableId + 2,
+			tid:      storage.EngineTableId + 2,
+			colNames: colNames2,
+			colTypes: colTypes2,
+			primary:  primary2,
 		},
 		Select{
 			pred: predicateFunc{
@@ -695,7 +788,10 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 
 	testStorage(t, st.Begin(), nil, []interface{}{
 		OpenTable{
-			tid: storage.EngineTableId + 2,
+			tid:      storage.EngineTableId + 2,
+			colNames: colNames2,
+			colTypes: colTypes2,
+			primary:  primary2,
 		},
 		Select{
 			pred: predicateFunc{
@@ -714,7 +810,10 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 
 	testStorage(t, st.Begin(), nil, []interface{}{
 		OpenTable{
-			tid: storage.EngineTableId + 2,
+			tid:      storage.EngineTableId + 2,
+			colNames: colNames2,
+			colTypes: colTypes2,
+			primary:  primary2,
 		},
 		Select{
 			pred: predicateFunc{
@@ -730,7 +829,10 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 
 	testStorage(t, st.Begin(), nil, []interface{}{
 		OpenTable{
-			tid: storage.EngineTableId + 2,
+			tid:      storage.EngineTableId + 2,
+			colNames: colNames2,
+			colTypes: colTypes2,
+			primary:  primary2,
 		},
 		Select{
 			pred: predicateFunc{
@@ -747,7 +849,10 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 
 	testStorage(t, st.Begin(), nil, []interface{}{
 		OpenTable{
-			tid: storage.EngineTableId + 2,
+			tid:      storage.EngineTableId + 2,
+			colNames: colNames2,
+			colTypes: colTypes2,
+			primary:  primary2,
 		},
 		Select{
 			cols:   []types.ColumnNum{4, 1, 0},
@@ -764,8 +869,6 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 }
 
 func TestDelete(t *testing.T, store string, newStore NewStore) {
-	t.Helper()
-
 	st, err := newStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("%s.NewStore() failed with %s", store, err)
@@ -792,7 +895,10 @@ func TestDelete(t *testing.T, store string, newStore NewStore) {
 
 	testStorage(t, st.Begin(), nil, []interface{}{
 		OpenTable{
-			tid: storage.EngineTableId + 1,
+			tid:      storage.EngineTableId + 1,
+			colNames: colNames,
+			colTypes: colTypes,
+			primary:  primary,
 		},
 		Insert{
 			rows: testutil.MustParseRows(`
@@ -808,7 +914,10 @@ func TestDelete(t *testing.T, store string, newStore NewStore) {
 
 	testStorage(t, st.Begin(), nil, []interface{}{
 		OpenTable{
-			tid: storage.EngineTableId + 1,
+			tid:      storage.EngineTableId + 1,
+			colNames: colNames,
+			colTypes: colTypes,
+			primary:  primary,
 		},
 		Rows{},
 		Next{row: testutil.MustParseRow("(0, 0, 0, 'zero')")},
@@ -821,7 +930,10 @@ func TestDelete(t *testing.T, store string, newStore NewStore) {
 
 	testStorage(t, st.Begin(), nil, []interface{}{
 		OpenTable{
-			tid: storage.EngineTableId + 1,
+			tid:      storage.EngineTableId + 1,
+			colNames: colNames,
+			colTypes: colTypes,
+			primary:  primary,
 		},
 		Select{
 			rows: testutil.MustParseRows(`
@@ -850,7 +962,10 @@ func TestDelete(t *testing.T, store string, newStore NewStore) {
 
 	testStorage(t, st.Begin(), nil, []interface{}{
 		OpenTable{
-			tid: storage.EngineTableId + 1,
+			tid:      storage.EngineTableId + 1,
+			colNames: colNames,
+			colTypes: colTypes,
+			primary:  primary,
 		},
 		Select{
 			rows: testutil.MustParseRows(`
@@ -876,7 +991,10 @@ func TestDelete(t *testing.T, store string, newStore NewStore) {
 
 	testStorage(t, st.Begin(), nil, []interface{}{
 		OpenTable{
-			tid: storage.EngineTableId + 1,
+			tid:      storage.EngineTableId + 1,
+			colNames: colNames,
+			colTypes: colTypes,
+			primary:  primary,
 		},
 		Select{
 			rows: testutil.MustParseRows(`
@@ -890,7 +1008,10 @@ func TestDelete(t *testing.T, store string, newStore NewStore) {
 
 	testStorage(t, st.Begin(), nil, []interface{}{
 		OpenTable{
-			tid: storage.EngineTableId + 1,
+			tid:      storage.EngineTableId + 1,
+			colNames: colNames,
+			colTypes: colTypes,
+			primary:  primary,
 		},
 		Rows{},
 		Next{row: testutil.MustParseRow("(0, 0, 0, 'zero')")},
@@ -905,8 +1026,6 @@ func TestDelete(t *testing.T, store string, newStore NewStore) {
 }
 
 func TestUpdate(t *testing.T, store string, newStore NewStore) {
-	t.Helper()
-
 	st, err := newStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("%s.NewStore() failed with %s", store, err)
@@ -933,7 +1052,10 @@ func TestUpdate(t *testing.T, store string, newStore NewStore) {
 
 	testStorage(t, st.Begin(), nil, []interface{}{
 		OpenTable{
-			tid: storage.EngineTableId + 1,
+			tid:      storage.EngineTableId + 1,
+			colNames: colNames,
+			colTypes: colTypes,
+			primary:  primary,
 		},
 		Insert{
 			rows: testutil.MustParseRows(`
@@ -947,7 +1069,10 @@ func TestUpdate(t *testing.T, store string, newStore NewStore) {
 
 	testStorage(t, st.Begin(), nil, []interface{}{
 		OpenTable{
-			tid: storage.EngineTableId + 1,
+			tid:      storage.EngineTableId + 1,
+			colNames: colNames,
+			colTypes: colTypes,
+			primary:  primary,
 		},
 		Rows{},
 		Next{row: testutil.MustParseRow("(0, 0, 0, 'zero')")},
@@ -963,7 +1088,10 @@ func TestUpdate(t *testing.T, store string, newStore NewStore) {
 
 	testStorage(t, st.Begin(), nil, []interface{}{
 		OpenTable{
-			tid: storage.EngineTableId + 1,
+			tid:      storage.EngineTableId + 1,
+			colNames: colNames,
+			colTypes: colTypes,
+			primary:  primary,
 		},
 		Select{
 			rows: testutil.MustParseRows(`
@@ -994,7 +1122,10 @@ func TestUpdate(t *testing.T, store string, newStore NewStore) {
 
 	testStorage(t, st.Begin(), nil, []interface{}{
 		OpenTable{
-			tid: storage.EngineTableId + 1,
+			tid:      storage.EngineTableId + 1,
+			colNames: colNames,
+			colTypes: colTypes,
+			primary:  primary,
 		},
 		Select{
 			rows: testutil.MustParseRows(`
@@ -1024,7 +1155,10 @@ func TestUpdate(t *testing.T, store string, newStore NewStore) {
 
 	testStorage(t, st.Begin(), nil, []interface{}{
 		OpenTable{
-			tid: storage.EngineTableId + 1,
+			tid:      storage.EngineTableId + 1,
+			colNames: colNames,
+			colTypes: colTypes,
+			primary:  primary,
 		},
 		Select{
 			rows: testutil.MustParseRows(`
@@ -1038,7 +1172,10 @@ func TestUpdate(t *testing.T, store string, newStore NewStore) {
 
 	testStorage(t, st.Begin(), nil, []interface{}{
 		OpenTable{
-			tid: storage.EngineTableId + 1,
+			tid:      storage.EngineTableId + 1,
+			colNames: colNames,
+			colTypes: colTypes,
+			primary:  primary,
 		},
 		Rows{},
 		Next{row: testutil.MustParseRow("(0, 0, 0, 'zero')")},
@@ -1054,7 +1191,10 @@ func TestUpdate(t *testing.T, store string, newStore NewStore) {
 
 	testStorage(t, st.Begin(), nil, []interface{}{
 		OpenTable{
-			tid: storage.EngineTableId + 1,
+			tid:      storage.EngineTableId + 1,
+			colNames: colNames,
+			colTypes: colTypes,
+			primary:  primary,
 		},
 		Rows{},
 		Next{row: testutil.MustParseRow("(0, 0, 0, 'zero')")},
@@ -1070,8 +1210,6 @@ func TestUpdate(t *testing.T, store string, newStore NewStore) {
 }
 
 func TestTable(t *testing.T, store string, newStore NewStore) {
-	t.Helper()
-
 	st, err := newStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("%s.NewStore() failed with %s", store, err)
@@ -1109,7 +1247,10 @@ func TestTable(t *testing.T, store string, newStore NewStore) {
 
 	testStorage(t, st.Begin(), nil, []interface{}{
 		OpenTable{
-			tid: storage.EngineTableId + 1,
+			tid:      storage.EngineTableId + 1,
+			colNames: colNames,
+			colTypes: colTypes,
+			primary:  primary,
 		},
 		Insert{
 			rows: rows,
@@ -1119,7 +1260,10 @@ func TestTable(t *testing.T, store string, newStore NewStore) {
 
 	testStorage(t, st.Begin(), nil, []interface{}{
 		OpenTable{
-			tid: storage.EngineTableId + 1,
+			tid:      storage.EngineTableId + 1,
+			colNames: colNames,
+			colTypes: colTypes,
+			primary:  primary,
 		},
 		Select{
 			rows: rows,
@@ -1129,7 +1273,10 @@ func TestTable(t *testing.T, store string, newStore NewStore) {
 
 	testStorage(t, st.Begin(), nil, []interface{}{
 		OpenTable{
-			tid: storage.EngineTableId + 1,
+			tid:      storage.EngineTableId + 1,
+			colNames: colNames,
+			colTypes: colTypes,
+			primary:  primary,
 		},
 		UpdateSet{
 			pred: predicateFunc{
@@ -1151,7 +1298,10 @@ func TestTable(t *testing.T, store string, newStore NewStore) {
 
 	testStorage(t, st.Begin(), nil, []interface{}{
 		OpenTable{
-			tid: storage.EngineTableId + 1,
+			tid:      storage.EngineTableId + 1,
+			colNames: colNames,
+			colTypes: colTypes,
+			primary:  primary,
 		},
 		Select{
 			rows: rows,
@@ -1161,7 +1311,10 @@ func TestTable(t *testing.T, store string, newStore NewStore) {
 
 	testStorage(t, st.Begin(), nil, []interface{}{
 		OpenTable{
-			tid: storage.EngineTableId + 1,
+			tid:      storage.EngineTableId + 1,
+			colNames: colNames,
+			colTypes: colTypes,
+			primary:  primary,
 		},
 		DeleteFrom{
 			pred: predicateFunc{
@@ -1182,7 +1335,10 @@ func TestTable(t *testing.T, store string, newStore NewStore) {
 
 	testStorage(t, st.Begin(), nil, []interface{}{
 		OpenTable{
-			tid: storage.EngineTableId + 1,
+			tid:      storage.EngineTableId + 1,
+			colNames: colNames,
+			colTypes: colTypes,
+			primary:  primary,
 		},
 		Select{
 			rows: rows,

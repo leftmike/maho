@@ -24,13 +24,6 @@ import (
 - column types
 -- logical: engine and above
 -- physical: storage
-
-- typedtable
--- remove ParsePrimary, ParseColumn
--- TypedTableType
-
-- storage
--- OpenTable: pass in table type information
 */
 
 func main() {

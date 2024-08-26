@@ -48,6 +48,7 @@ const (
 	PUBLIC
 	PRECISION
 	REAL
+	ROWID
 	SCHEMAS
 	SEQUENCES
 	SMALLINT
@@ -158,6 +159,7 @@ var (
 		"primary":     PRIMARY_QUOTED,
 		"private":     PRIVATE,
 		"public":      PUBLIC,
+		"__rowid":     ROWID,
 		"schemas":     SCHEMAS,
 		"sequences":   SEQUENCES,
 		"system":      SYSTEM,

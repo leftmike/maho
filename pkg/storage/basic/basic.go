@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"sync"
 
 	"github.com/google/btree"
@@ -35,7 +36,6 @@ type tableType struct {
 	ColumnNames []types.Identifier
 	ColumnTypes []types.ColumnType
 	Key         []types.ColumnKey
-	HasPrimary  bool
 }
 
 type table struct {
@@ -66,6 +66,20 @@ func (_ *store) Name() string {
 	return "basic"
 }
 
+func (_ *store) SetupColumns(colNames []types.Identifier, colTypes []types.ColumnType,
+	primary []types.ColumnKey) ([]types.Identifier, []types.ColumnType, []types.ColumnKey) {
+
+	if primary == nil {
+		colNames = append(append(make([]types.Identifier, 0, len(colNames)+1), types.ROWID),
+			colNames...)
+		colTypes = append(append(make([]types.ColumnType, 0, len(colTypes)+1),
+			types.Int64ColType), colTypes...)
+		primary = []types.ColumnKey{types.MakeColumnKey(0, false)}
+	}
+
+	return colNames, colTypes, primary
+}
+
 func (st *store) Begin() storage.Transaction {
 	st.mutex.Lock()
 	return &transaction{
@@ -78,6 +92,10 @@ var (
 	tableTypesRelation relationId = toRelationId(0, 0)
 	tableTypesKey                 = []types.ColumnKey{types.MakeColumnKey(0, false)}
 )
+
+func (tx *transaction) Store() storage.Store {
+	return tx.st
+}
 
 func (tx *transaction) getTableType(tid storage.TableId) *tableType {
 	it := rowToItem(tableTypesRelation, tableTypesKey, types.Row{types.Int64Value(tid)})
@@ -118,12 +136,29 @@ func (tx *transaction) deleteTableType(tid storage.TableId) bool {
 	return ok
 }
 
-func (tx *transaction) OpenTable(ctx context.Context, tid storage.TableId) (storage.Table,
+func (tx *transaction) OpenTable(ctx context.Context, tid storage.TableId, tn types.TableName,
+	colNames []types.Identifier, colTypes []types.ColumnType,
+	primary []types.ColumnKey) (storage.Table,
 	error) {
 
 	tt := tx.getTableType(tid)
 	if tt == nil {
 		panic(fmt.Sprintf("basic: table not found: %d", tid))
+	}
+
+	if tn != tt.Name {
+		panic(fmt.Sprintf("basic: wrong table name: %d: %s %s", tid, tn, tt.Name))
+	}
+	if !slices.Equal(colNames, tt.ColumnNames) {
+		panic(fmt.Sprintf("basic: wrong column names: %d: %v %v", tid, colNames,
+			tt.ColumnNames))
+	}
+	if !slices.Equal(colTypes, tt.ColumnTypes) {
+		panic(fmt.Sprintf("basic: wrong column types: %d: %v %v", tid, colTypes,
+			tt.ColumnTypes))
+	}
+	if !slices.Equal(primary, tt.Key) {
+		panic(fmt.Sprintf("basic: wrong primary key: %d: %v %v", tid, primary, tt.Key))
 	}
 
 	return &table{
@@ -142,20 +177,25 @@ func (tx *transaction) CreateTable(ctx context.Context, tid storage.TableId, tn 
 		panic(fmt.Sprintf("basic: table already exists: %d", tid))
 	} else if len(colNames) != len(colTypes) {
 		panic(fmt.Sprintf("basic: column names doesn't match types: %#v %#v", colNames, colTypes))
+	} else if primary == nil {
+		panic("basic: missing primary key")
 	}
 
-	hasPrimary := primary != nil
-	if primary == nil {
-		colNames = append(append(make([]types.Identifier, 0, len(colNames)+1), 0), colNames...)
-		colTypes = append(append(make([]types.ColumnType, 0, len(colTypes)+1),
-			types.Int64ColType), colTypes...)
-		primary = []types.ColumnKey{types.MakeColumnKey(0, false)}
-	} else {
-		for _, ck := range primary {
-			if int(ck.Column()) >= len(colNames) {
-				panic(fmt.Sprintf("basic: primary key out of range: %d: %#v", ck.Column(),
-					colNames))
-			}
+	for idx, col := range colNames {
+		if col != types.ROWID {
+			continue
+		}
+
+		if idx != 0 || colTypes[0] != types.Int64ColType || len(primary) != 1 ||
+			primary[0] != types.MakeColumnKey(0, false) {
+			return fmt.Errorf("basic: table %s: reserved column name used: %s", tn, types.ROWID)
+		}
+	}
+
+	for _, ck := range primary {
+		if int(ck.Column()) >= len(colNames) {
+			panic(fmt.Sprintf("basic: primary key out of range: %d: %#v", ck.Column(),
+				colNames))
 		}
 	}
 
@@ -166,7 +206,6 @@ func (tx *transaction) CreateTable(ctx context.Context, tid storage.TableId, tn 
 		ColumnNames: colNames,
 		ColumnTypes: colTypes,
 		Key:         primary,
-		HasPrimary:  hasPrimary,
 	})
 	return nil
 }
