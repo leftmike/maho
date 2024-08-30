@@ -1,7 +1,9 @@
 package engine
 
 import (
+	"bytes"
 	"context"
+	"encoding/gob"
 
 	"github.com/leftmike/maho/pkg/parser/sql"
 	"github.com/leftmike/maho/pkg/storage"
@@ -104,7 +106,7 @@ type tablesRow struct {
 	Schema   string `maho:"size=128,primary"`
 	Table    string `maho:"size=128,primary"`
 	TableID  storage.TableId
-	//Columns  []byte
+	Type     []byte `maho:"size=8192"`
 }
 
 func (eng *engine) CreateDatabase(dn types.Identifier, opts storage.OptionsMap) error {
@@ -152,6 +154,26 @@ func (tx *transaction) ListSchemas(ctx context.Context, dn types.Identifier) ([]
 func (tx *transaction) OpenTable(ctx context.Context, tn types.TableName) (Table, error) {
 	// XXX
 	return nil, nil
+}
+
+func (tt *TableType) Encode() ([]byte, error) {
+	var buf bytes.Buffer
+	err := gob.NewEncoder(&buf).Encode(tt)
+	if err != nil {
+		return nil, err
+	}
+
+	return buf.Bytes(), nil
+}
+
+func DecodeTableType(buf []byte) (*TableType, error) {
+	var tt TableType
+	err := gob.NewDecoder(bytes.NewReader(buf)).Decode(&tt)
+	if err != nil {
+		return nil, err
+	}
+
+	return &tt, nil
 }
 
 func (tx *transaction) CreateTable(ctx context.Context, tn types.TableName,

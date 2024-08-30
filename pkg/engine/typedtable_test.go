@@ -182,12 +182,14 @@ func TestMakeTypedTableInfo(t *testing.T) {
 					types.ID("schema", true),
 					types.ID("table", true),
 					types.ID("table_id", true),
+					types.ID("type", true),
 				},
 				colTypes: []types.ColumnType{
 					{Type: types.StringType, Size: 128, NotNull: true},
 					{Type: types.StringType, Size: 128, NotNull: true},
 					{Type: types.StringType, Size: 128, NotNull: true},
 					{Type: types.Int64Type, Size: 4, NotNull: true},
+					{Type: types.BytesType, Size: 8192, NotNull: true},
 				},
 				primary: []types.ColumnKey{
 					types.MakeColumnKey(0, false),

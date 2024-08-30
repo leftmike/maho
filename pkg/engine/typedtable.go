@@ -188,6 +188,15 @@ func makeTypedInfo(tid storage.TableId, tn types.TableName, st interface{}) *typ
 	}
 }
 
+func (ti *typedInfo) toTableType() *TableType {
+	return &TableType{
+		Version:     1,
+		ColumnNames: ti.colNames,
+		ColumnTypes: ti.colTypes,
+		Key:         ti.primary,
+	}
+}
+
 func (ti *typedInfo) structToRow(st interface{}) types.Row {
 	typ := reflect.TypeOf(st)
 	if typ.Kind() != reflect.Pointer {
