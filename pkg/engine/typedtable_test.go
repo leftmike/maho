@@ -163,6 +163,15 @@ func TestMakeTypedTableInfo(t *testing.T) {
 					{Type: types.Int64Type, Size: 4},
 					{Type: types.Int64Type, Size: 2, NotNull: true},
 				},
+				fldNames: []string{
+					"ColNum",
+					"Database",
+					"Abcdef",
+					"AbcID",
+					"Aaaaa",
+					"ABCDEF",
+					"DefGHi",
+				},
 			},
 		},
 		{
@@ -176,6 +185,7 @@ func TestMakeTypedTableInfo(t *testing.T) {
 					{Type: types.StringType, Size: 1, NotNull: true},
 					{Type: types.StringType, Size: 1, NotNull: true},
 				},
+				fldNames: []string{"Name", "Field"},
 			},
 		},
 		{
@@ -189,7 +199,8 @@ func TestMakeTypedTableInfo(t *testing.T) {
 					{Type: types.StringType, Size: 128, NotNull: true},
 					{Type: types.Int64Type, Size: 8, NotNull: true},
 				},
-				primary: []types.ColumnKey{types.MakeColumnKey(0, false)},
+				primary:  []types.ColumnKey{types.MakeColumnKey(0, false)},
+				fldNames: []string{"Sequence", "Current"},
 			},
 		},
 		{
@@ -214,6 +225,7 @@ func TestMakeTypedTableInfo(t *testing.T) {
 					types.MakeColumnKey(1, false),
 					types.MakeColumnKey(2, false),
 				},
+				fldNames: []string{"Database", "Schema", "Table", "TableID", "Type"},
 			},
 		},
 	}
@@ -290,6 +302,18 @@ func testRows(t *testing.T, tt *typedTable, structs []testRow, min, max int) {
 	err = tr.next(ctx, &trow)
 	if err != io.EOF {
 		t.Errorf("next(%s) got %s want io.EOF", tt.ti.tn, err)
+	}
+}
+
+func testLookup(t *testing.T, tt *typedTable, structs []testRow, idx int) {
+	ctx := context.Background()
+
+	trow := testRow{Col0: idx}
+	err := tt.lookup(ctx, &trow)
+	if err != nil {
+		t.Errorf("lookup(%s) failed with %s", tt.ti.tn, err)
+	} else if !reflect.DeepEqual(trow, structs[idx]) {
+		t.Errorf("lookup(%s) got %#v want %#v", tt.ti.tn, trow, structs[idx])
 	}
 }
 
@@ -377,6 +401,10 @@ func TestTypedTable(t *testing.T) {
 	testRows(t, tt, structs, 1, -1)
 	testRows(t, tt, structs, -1, 1)
 	testRows(t, tt, structs, 2, 2)
+
+	testLookup(t, tt, structs, 0)
+	testLookup(t, tt, structs, 1)
+	testLookup(t, tt, structs, 2)
 
 	err = tx.Commit(ctx)
 	if err != nil {

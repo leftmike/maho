@@ -21,6 +21,7 @@ type typedInfo struct {
 	colNames []types.Identifier
 	colTypes []types.ColumnType
 	primary  []types.ColumnKey
+	fldNames []string
 }
 
 func fieldNameToColumnName(n string) types.Identifier {
@@ -106,6 +107,7 @@ func makeTypedInfo(tid storage.TableId, tn types.TableName, st interface{}) *typ
 	var colNames []types.Identifier
 	var colTypes []types.ColumnType
 	var primary []types.ColumnKey
+	var fldNames []string
 	for idx := 0; idx < typ.NumField(); idx += 1 {
 		fld := typ.Field(idx)
 		tags := fieldTags(fld.Tag.Get("maho"))
@@ -114,6 +116,7 @@ func makeTypedInfo(tid storage.TableId, tn types.TableName, st interface{}) *typ
 		} else {
 			colNames = append(colNames, fieldNameToColumnName(fld.Name))
 		}
+		fldNames = append(fldNames, fld.Name)
 
 		size := uint32(1)
 		if val, ok := tags["size"]; ok {
@@ -183,6 +186,7 @@ func makeTypedInfo(tid storage.TableId, tn types.TableName, st interface{}) *typ
 		colNames: colNames,
 		colTypes: colTypes,
 		primary:  primary,
+		fldNames: fldNames,
 	}
 }
 
@@ -192,6 +196,40 @@ func (ti *typedInfo) toTableType() *TableType {
 		ColumnNames: ti.colNames,
 		ColumnTypes: ti.colTypes,
 		Key:         ti.primary,
+	}
+}
+
+func fieldToValue(ct types.ColumnType, fval reflect.Value) types.Value {
+	if !ct.NotNull {
+		if fval.IsNil() {
+			return nil
+		}
+		if ct.Type != types.BytesType {
+			fval = fval.Elem()
+		}
+	}
+
+	switch ct.Type {
+	case types.BoolType:
+		return types.BoolValue(fval.Bool())
+	case types.StringType:
+		s := fval.String()
+		if len(s) > int(ct.Size) {
+			panic(fmt.Sprintf("typed table: bad string value: %d: %d", ct.Size, len(s)))
+		}
+		return types.StringValue(s)
+	case types.BytesType:
+		b := fval.Bytes()
+		if len(b) > int(ct.Size) {
+			panic(fmt.Sprintf("typed table: bad bytes value: %d: %d", ct.Size, len(b)))
+		}
+		return types.BytesValue(slices.Clone(b))
+	case types.Float64Type:
+		return types.Float64Value(fval.Float())
+	case types.Int64Type:
+		return types.Int64Value(fval.Int())
+	default:
+		panic(fmt.Sprintf("unexpected column type: %#v %d", ct, ct.Type))
 	}
 }
 
@@ -213,38 +251,7 @@ func (ti *typedInfo) structToRow(st interface{}) types.Row {
 
 	row := make(types.Row, len(ti.colTypes))
 	for cdx, ct := range ti.colTypes {
-		fval := val.Field(cdx)
-		if !ct.NotNull {
-			if fval.IsNil() {
-				continue
-			}
-			if ct.Type != types.BytesType {
-				fval = fval.Elem()
-			}
-		}
-
-		switch ct.Type {
-		case types.BoolType:
-			row[cdx] = types.BoolValue(fval.Bool())
-		case types.StringType:
-			s := fval.String()
-			if len(s) > int(ct.Size) {
-				panic(fmt.Sprintf("typed table: bad string value: %d: %d", ct.Size, len(s)))
-			}
-			row[cdx] = types.StringValue(s)
-		case types.BytesType:
-			b := fval.Bytes()
-			if len(b) > int(ct.Size) {
-				panic(fmt.Sprintf("typed table: bad bytes value: %d: %d", ct.Size, len(b)))
-			}
-			row[cdx] = types.BytesValue(slices.Clone(b))
-		case types.Float64Type:
-			row[cdx] = types.Float64Value(fval.Float())
-		case types.Int64Type:
-			row[cdx] = types.Int64Value(fval.Int())
-		default:
-			panic(fmt.Sprintf("unexpected column type: %#v %d", ct, ct.Type))
-		}
+		row[cdx] = fieldToValue(ct, val.Field(cdx))
 	}
 
 	return row
@@ -323,9 +330,39 @@ func (ti *typedInfo) rowToStruct(row types.Row, st interface{}) {
 				fval.Set(reflect.ValueOf(&i))
 			}
 		default:
-			panic(fmt.Sprintf("unexpected column type: %#v %d", ct, ct.Type))
+			panic(fmt.Sprintf("typed table: unexpected column type: %#v %d", ct, ct.Type))
 		}
 	}
+}
+
+func fieldNameToColumn(fldNames []string, name string) int {
+	for idx, fn := range fldNames {
+		if fn == name {
+			return idx
+		}
+	}
+
+	panic(fmt.Sprintf("typed table: field name not found: %s: %v", name, fldNames))
+}
+
+func (ti *typedInfo) structToColsVals(update interface{}) ([]types.ColumnNum, []types.Value) {
+	var cols []types.ColumnNum
+	var vals []types.Value
+
+	typ := reflect.TypeOf(update)
+	if typ.Kind() != reflect.Pointer {
+		panic(fmt.Sprintf("typed table: must be pointer to a struct; got %#v", update))
+	}
+
+	typ = typ.Elem()
+	val := reflect.ValueOf(update).Elem()
+	for idx := 0; idx < typ.NumField(); idx += 1 {
+		cdx := fieldNameToColumn(ti.fldNames, typ.Field(idx).Name)
+		cols = append(cols, types.ColumnNum(cdx))
+		vals = append(vals, fieldToValue(ti.colTypes[cdx], val.Field(idx)))
+	}
+
+	return cols, vals
 }
 
 type typedTable struct {
@@ -382,6 +419,18 @@ func (tt *typedTable) insert(ctx context.Context, structs ...interface{}) error 
 	return tt.tbl.Insert(ctx, rows)
 }
 
+func (tt *typedTable) lookup(ctx context.Context, st interface{}) error {
+	tr, err := tt.rows(ctx, st, st)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		tr.close(ctx)
+	}()
+
+	return tr.next(ctx, st)
+}
+
 func (tr *typedRows) next(ctx context.Context, st interface{}) error {
 	row, err := tr.rows.Next(ctx)
 	if err != nil {
@@ -411,11 +460,10 @@ func (tr *typedRows) close(ctx context.Context) error {
 }
 
 func (trr *typedRowRef) update(ctx context.Context, update interface{}) error {
-	// XXX
-	return nil
+	cols, vals := trr.ti.structToColsVals(update)
+	return trr.rr.Update(ctx, cols, vals)
 }
 
 func (trr *typedRowRef) delete(ctx context.Context) error {
-	// XXX
-	return nil
+	return trr.rr.Delete(ctx)
 }
