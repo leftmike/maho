@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/gob"
+	"fmt"
 
 	"github.com/leftmike/maho/pkg/parser/sql"
 	"github.com/leftmike/maho/pkg/storage"
@@ -105,17 +106,37 @@ type tablesRow struct {
 	Database string `maho:"size=128,primary"`
 	Schema   string `maho:"size=128,primary"`
 	Table    string `maho:"size=128,primary"`
-	TableID  storage.TableId
-	Type     []byte `maho:"size=8192"`
+	TableID  int64  // storage.TableId
+	Type     []byte `maho:"size=8192,notnull"`
 }
 
 func (eng *engine) CreateDatabase(dn types.Identifier, opts storage.OptionsMap) error {
-	// XXX
-	return nil
+	for key := range opts {
+		return fmt.Errorf("engine: unexpected option: %s", key)
+	}
+
+	tx := eng.store.Begin()
+
+	ctx := context.Background()
+	tt, err := openTypedTable(ctx, tx, databasesTypedInfo)
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	err = tt.insert(ctx,
+		&databasesRow{
+			Database: dn.String(),
+		})
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	return tx.Commit(ctx)
 }
 
 func (eng *engine) DropDatabase(dn types.Identifier, ifExists bool) error {
-
 	// XXX
 	return nil
 }

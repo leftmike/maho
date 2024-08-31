@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/leftmike/maho/pkg/engine"
+	"github.com/leftmike/maho/pkg/storage"
+	"github.com/leftmike/maho/pkg/storage/basic"
 	"github.com/leftmike/maho/pkg/types"
 )
 
@@ -48,6 +50,57 @@ func TestTableType(t *testing.T) {
 			t.Errorf("DecodeTableType(%#v) failed with %s", &tt, err)
 		} else if !reflect.DeepEqual(&tt, rtt) {
 			t.Errorf("DecodeTableType(Encode(%#v)) got %#v", &tt, rtt)
+		}
+	}
+}
+
+type createDatabase struct {
+	dn   types.Identifier
+	opts storage.OptionsMap
+	fail bool
+}
+
+type dropDatabase struct {
+	dn       types.Identifier
+	ifExists bool
+	fail     bool
+}
+
+func TestDatabase(t *testing.T) {
+	cases := []interface{}{
+		createDatabase{
+			dn: types.ID("db", false),
+		},
+		createDatabase{
+			dn:   types.ID("db", false),
+			fail: true,
+		},
+	}
+
+	s := t.TempDir()
+	store, err := basic.NewStore(s)
+	if err != nil {
+		t.Fatalf("NewStore(%s) failed with %s", s, err)
+	}
+	err = engine.Init(store)
+	if err != nil {
+		t.Fatalf("Init() failed with %s", err)
+	}
+
+	eng := engine.NewEngine(store)
+	for _, c := range cases {
+		switch c := c.(type) {
+		case createDatabase:
+			err := eng.CreateDatabase(c.dn, c.opts)
+			if c.fail {
+				if err == nil {
+					t.Error("CreateDatabase() did not fail")
+				}
+			} else if err != nil {
+				t.Errorf("CreateDatabase() failed with %s", err)
+			}
+		case dropDatabase:
+
 		}
 	}
 }

@@ -86,7 +86,7 @@ func initStore(ctx context.Context, tx storage.Transaction) error {
 				Database: it.ti.tn.Database.String(),
 				Schema:   it.ti.tn.Schema.String(),
 				Table:    it.ti.tn.Table.String(),
-				TableID:  it.ti.tid,
+				TableID:  int64(it.ti.tid),
 				Type:     buf,
 			})
 		if err != nil {

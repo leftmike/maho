@@ -108,7 +108,25 @@ func TestMakeTypedTableInfo(t *testing.T) {
 		},
 		{
 			row: struct {
-				Abc [8]string
+				Abc [8]byte
+			}{},
+			panicked: true,
+		},
+		{
+			row: struct {
+				Abc *[]byte
+			}{},
+			panicked: true,
+		},
+		{
+			row: struct {
+				Abc uint
+			}{},
+			panicked: true,
+		},
+		{
+			row: struct {
+				Abc int `maho:"notnull"`
 			}{},
 			panicked: true,
 		},
@@ -116,12 +134,12 @@ func TestMakeTypedTableInfo(t *testing.T) {
 			tid: maxReservedTableId + 1,
 			tn:  tn,
 			row: struct {
-				ColNum   byte    `db:"name,primary=123"`
+				ColNum   int8    `db:"name,primary=123"`
 				Database string  `maho:"size=123"`
-				Abcdef   *string `maho:"size=45,fixed"`
+				Abcdef   *string `maho:"size=45"`
 				AbcID    []byte  `maho:"size=16"`
-				Aaaaa    [32]byte
-				ABCDEF   *uint32
+				Aaaaa    []byte  `maho:"size=32,notnull"`
+				ABCDEF   *int32
 				DefGHi   int16 `maho:"name=DEFGHI"`
 			}{},
 			ti: &typedInfo{
@@ -139,9 +157,9 @@ func TestMakeTypedTableInfo(t *testing.T) {
 				colTypes: []types.ColumnType{
 					{Type: types.Int64Type, Size: 1, NotNull: true},
 					{Type: types.StringType, Size: 123, NotNull: true},
-					{Type: types.StringType, Size: 45, Fixed: true},
-					{Type: types.BytesType, Size: 16, NotNull: true},
-					{Type: types.BytesType, Size: 32, Fixed: true, NotNull: true},
+					{Type: types.StringType, Size: 45},
+					{Type: types.BytesType, Size: 16},
+					{Type: types.BytesType, Size: 32, NotNull: true},
 					{Type: types.Int64Type, Size: 4},
 					{Type: types.Int64Type, Size: 2, NotNull: true},
 				},
@@ -188,7 +206,7 @@ func TestMakeTypedTableInfo(t *testing.T) {
 					{Type: types.StringType, Size: 128, NotNull: true},
 					{Type: types.StringType, Size: 128, NotNull: true},
 					{Type: types.StringType, Size: 128, NotNull: true},
-					{Type: types.Int64Type, Size: 4, NotNull: true},
+					{Type: types.Int64Type, Size: 8, NotNull: true},
 					{Type: types.BytesType, Size: 8192, NotNull: true},
 				},
 				primary: []types.ColumnKey{
@@ -220,28 +238,73 @@ func TestMakeTypedTableInfo(t *testing.T) {
 	}
 }
 
-func TestTypedInsert(t *testing.T) {
+type testRow struct {
+	Col0 int `maho:"primary"`
+	Col1 bool
+	Col2 string  `maho:"size=64"`
+	Col3 *string `maho:"size=3"`
+	Col4 []byte  `maho:"size=32,notnull"`
+	Col5 []byte  `maho:"size=4"`
+	Col6 float64
+	Col7 int8
+	Col8 *int64
+}
+
+func testRows(t *testing.T, tt *typedTable, structs []testRow, min, max int) {
+	ctx := context.Background()
+
+	var minSt, maxSt interface{}
+	if min < 0 {
+		min = 0
+	} else {
+		minSt = &testRow{Col0: min}
+	}
+	if max < 0 {
+		max = len(structs) - 1
+	} else {
+		maxSt = &testRow{Col0: max}
+	}
+	tr, err := tt.rows(ctx, minSt, maxSt)
+	if err != nil {
+		t.Fatalf("rows(%s) failed with %s", tt.ti.tn, err)
+	}
+	defer func() {
+		err := tr.close(ctx)
+		if err != nil {
+			t.Fatalf("close(%s) failed with %s", tt.ti.tn, err)
+		}
+	}()
+
+	for idx := min; idx <= max; idx += 1 {
+		st := structs[idx]
+		var trow testRow
+		err = tr.next(ctx, &trow)
+		if err != nil {
+			t.Errorf("next(%s) failed with %s", tt.ti.tn, err)
+		} else if !reflect.DeepEqual(trow, st) {
+			t.Errorf("next(%s) got %#v want %#v", tt.ti.tn, trow, st)
+		}
+	}
+
+	var trow testRow
+	err = tr.next(ctx, &trow)
+	if err != io.EOF {
+		t.Errorf("next(%s) got %s want io.EOF", tt.ti.tn, err)
+	}
+}
+
+func TestTypedTable(t *testing.T) {
 	s2 := "xyz"
 	i2 := int64(1234)
 
-	structs := []struct {
-		Col0 int `maho:"primary"`
-		Col1 bool
-		Col2 string  `maho:"size=64"`
-		Col3 *string `maho:"size=3,fixed"`
-		Col4 []byte  `maho:"size=32"`
-		Col5 [4]byte
-		Col6 float64
-		Col7 byte
-		Col8 *int64
-	}{
+	structs := []testRow{
 		{Col0: 0},
 		{
 			Col0: 1,
 			Col1: true,
 			Col2: "abcdef",
 			Col4: []byte{0, 1, 2},
-			Col5: [4]byte{3, 4, 5, 6},
+			Col5: []byte{3, 4, 5, 6},
 			Col6: 123.456,
 			Col7: 78,
 		},
@@ -253,11 +316,10 @@ func TestTypedInsert(t *testing.T) {
 	}
 
 	rows := []types.Row{
-		{u.I(0), u.B(false), u.S(""), nil, u.Bytes(), u.Bytes(0, 0, 0, 0), u.F(0), u.I(0), nil},
+		{u.I(0), u.B(false), u.S(""), nil, u.Bytes(), nil, u.F(0), u.I(0), nil},
 		{u.I(1), u.B(true), u.S("abcdef"), nil, u.Bytes(0, 1, 2), u.Bytes(3, 4, 5, 6),
 			u.F(123.456), u.I(78), nil},
-		{u.I(2), u.B(false), u.S(""), u.S("xyz"), u.Bytes(), u.Bytes(0, 0, 0, 0), u.F(0), u.I(0),
-			u.I(1234)},
+		{u.I(2), u.B(false), u.S(""), u.S("xyz"), u.Bytes(), nil, u.F(0), u.I(0), u.I(1234)},
 	}
 
 	tid := maxReservedTableId + 1
@@ -303,5 +365,21 @@ func TestTypedInsert(t *testing.T) {
 
 	if !u.RowsEqual(rows, all, true) {
 		t.Errorf("Rows(%d) got %v want %v", tid, all, rows)
+	}
+
+	tx = store.Begin()
+	tt, err = openTypedTable(ctx, tx, ti)
+	if err != nil {
+		t.Fatalf("openTypedTable(%s) failed with %s", tn, err)
+	}
+
+	testRows(t, tt, structs, -1, -1)
+	testRows(t, tt, structs, 1, -1)
+	testRows(t, tt, structs, -1, 1)
+	testRows(t, tt, structs, 2, 2)
+
+	err = tx.Commit(ctx)
+	if err != nil {
+		t.Fatalf("Commit() failed with %s", err)
 	}
 }

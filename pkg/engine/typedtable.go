@@ -63,8 +63,8 @@ func fieldNameToColumnName(n string) types.Identifier {
 var (
 	validTags = map[string]bool{
 		"name":    true,
+		"notnull": false,
 		"primary": false,
-		"fixed":   false,
 		"size":    true,
 	}
 )
@@ -95,10 +95,8 @@ func fieldTags(s string) map[string]string {
 
 func makeTypedInfo(tid storage.TableId, tn types.TableName, st interface{}) *typedInfo {
 	typ := reflect.TypeOf(st)
-	//val := reflect.ValueOf(st)
 	if typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()
-		//val = val.Elem()
 	}
 
 	if typ.Kind() != reflect.Struct {
@@ -126,15 +124,14 @@ func makeTypedInfo(tid storage.TableId, tn types.TableName, st interface{}) *typ
 			size = uint32(n)
 		}
 
-		var fixed bool
-		if _, ok := tags["fixed"]; ok {
-			fixed = true
-		}
-
 		notNull := true
 		ftyp := fld.Type
 		if ftyp.Kind() == reflect.Pointer {
 			ftyp = ftyp.Elem()
+			if ftyp.Kind() == reflect.Slice {
+				panic("typed table: must not be pointer to a slice")
+			}
+
 			notNull = false
 		}
 
@@ -142,33 +139,34 @@ func makeTypedInfo(tid storage.TableId, tn types.TableName, st interface{}) *typ
 		switch ftyp.Kind() {
 		case reflect.Bool:
 			vt = types.BoolType
-		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
-			reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 			vt = types.Int64Type
 			size = uint32(ftyp.Size())
 		case reflect.Float32, reflect.Float64:
 			vt = types.Float64Type
 			size = 8
-		case reflect.Array, reflect.Slice:
+		case reflect.Slice:
 			elem := ftyp.Elem()
 			if elem.Kind() != reflect.Uint8 || elem.Size() != 1 {
-				panic(fmt.Sprintf("typed table: must slice or array of bytes: %s", elem))
+				panic(fmt.Sprintf("typed table: must be a slice of bytes: %s", elem))
 			}
 			vt = types.BytesType
-			if ftyp.Kind() == reflect.Array {
-				size = uint32(ftyp.Size())
-				fixed = true
-			}
 		case reflect.String:
 			vt = types.StringType
 		default:
 			panic(fmt.Sprintf("typed table: bad field type: %s: %s", fld.Name, ftyp.Kind()))
 		}
 
+		_, ok := tags["notnull"]
+		if ftyp.Kind() == reflect.Slice {
+			notNull = ok
+		} else if ok {
+			panic(fmt.Sprintf("typed table: not null tag must be on a slice: %s", ftyp.Kind()))
+		}
+
 		ct := types.ColumnType{
 			Type:    vt,
 			Size:    size,
-			Fixed:   fixed,
 			NotNull: notNull,
 		}
 		colTypes = append(colTypes, ct)
@@ -198,9 +196,13 @@ func (ti *typedInfo) toTableType() *TableType {
 }
 
 func (ti *typedInfo) structToRow(st interface{}) types.Row {
+	if st == nil {
+		return nil
+	}
+
 	typ := reflect.TypeOf(st)
 	if typ.Kind() != reflect.Pointer {
-		panic(fmt.Sprintf("typed table: must be pointer to a struct; got %v", st))
+		panic(fmt.Sprintf("typed table: must be pointer to a struct; got %#v", st))
 	}
 
 	typ = typ.Elem()
@@ -216,7 +218,9 @@ func (ti *typedInfo) structToRow(st interface{}) types.Row {
 			if fval.IsNil() {
 				continue
 			}
-			fval = fval.Elem()
+			if ct.Type != types.BytesType {
+				fval = fval.Elem()
+			}
 		}
 
 		switch ct.Type {
@@ -224,32 +228,104 @@ func (ti *typedInfo) structToRow(st interface{}) types.Row {
 			row[cdx] = types.BoolValue(fval.Bool())
 		case types.StringType:
 			s := fval.String()
-			if (ct.Fixed && len(s) != int(ct.Size)) || (!ct.Fixed && len(s) > int(ct.Size)) {
-				panic(fmt.Sprintf("typed table: bad string value: %v %d: %d", ct.Fixed, ct.Size,
-					len(s)))
+			if len(s) > int(ct.Size) {
+				panic(fmt.Sprintf("typed table: bad string value: %d: %d", ct.Size, len(s)))
 			}
 			row[cdx] = types.StringValue(s)
 		case types.BytesType:
 			b := fval.Bytes()
-			if (ct.Fixed && len(b) != int(ct.Size)) || (!ct.Fixed && len(b) > int(ct.Size)) {
-				panic(fmt.Sprintf("typed table: bad bytes value: %v %d: %d", ct.Fixed, ct.Size,
-					len(b)))
+			if len(b) > int(ct.Size) {
+				panic(fmt.Sprintf("typed table: bad bytes value: %d: %d", ct.Size, len(b)))
 			}
 			row[cdx] = types.BytesValue(slices.Clone(b))
 		case types.Float64Type:
 			row[cdx] = types.Float64Value(fval.Float())
 		case types.Int64Type:
-			if fval.CanInt() {
-				row[cdx] = types.Int64Value(fval.Int())
-			} else {
-				row[cdx] = types.Int64Value(fval.Uint())
-			}
+			row[cdx] = types.Int64Value(fval.Int())
 		default:
 			panic(fmt.Sprintf("unexpected column type: %#v %d", ct, ct.Type))
 		}
 	}
 
 	return row
+}
+
+func (ti *typedInfo) rowToStruct(row types.Row, st interface{}) {
+	typ := reflect.TypeOf(st)
+	if typ.Kind() != reflect.Pointer {
+		panic(fmt.Sprintf("typed table: must be pointer to a struct; got %#v", st))
+	}
+
+	typ = typ.Elem()
+	val := reflect.ValueOf(st).Elem()
+	if typ != ti.typ {
+		panic(fmt.Sprintf("typed table: bad struct type: %s %s", typ, ti.typ))
+	}
+
+	for cdx, ct := range ti.colTypes {
+		fval := val.Field(cdx)
+		if !ct.NotNull {
+			if row[cdx] == nil {
+				fval.SetZero()
+				continue
+			}
+		}
+
+		switch ct.Type {
+		case types.BoolType:
+			b, ok := row[cdx].(types.BoolValue)
+			if !ok {
+				panic(fmt.Sprintf("typed tabled: expected boolean value: %#v", row[cdx]))
+			}
+			if ct.NotNull {
+				fval.SetBool(bool(b))
+			} else {
+				b := bool(b)
+				fval.Set(reflect.ValueOf(&b))
+			}
+		case types.StringType:
+			s, ok := row[cdx].(types.StringValue)
+			if !ok {
+				panic(fmt.Sprintf("typed tabled: expected string value: %#v", row[cdx]))
+			}
+			if ct.NotNull {
+				fval.SetString(string(s))
+			} else {
+				s := string(s)
+				fval.Set(reflect.ValueOf(&s))
+			}
+		case types.BytesType:
+			b, ok := row[cdx].(types.BytesValue)
+			if !ok {
+				panic(fmt.Sprintf("typed tabled: expected bytes value: %#v", row[cdx]))
+			}
+			fval.SetBytes(slices.Clone(b))
+		case types.Float64Type:
+			f, ok := row[cdx].(types.Float64Value)
+			if !ok {
+				panic(fmt.Sprintf("typed tabled: expected float64 value: %#v", row[cdx]))
+			}
+			if ct.NotNull {
+				fval.SetFloat(float64(f))
+			} else {
+				f := float64(f)
+				fval.Set(reflect.ValueOf(&f))
+			}
+		case types.Int64Type:
+			i, ok := row[cdx].(types.Int64Value)
+			if !ok {
+				panic(fmt.Sprintf("typed tabled: expected int64 value: %#v", row[cdx]))
+			}
+			if ct.NotNull {
+				fval.SetInt(int64(i))
+			} else {
+				i := int64(i)
+				fval.Set(reflect.ValueOf(&i))
+			}
+		default:
+			panic(fmt.Sprintf("unexpected column type: %#v %d", ct, ct.Type))
+		}
+	}
 }
 
 type typedTable struct {
@@ -285,11 +361,16 @@ func createTypedTable(ctx context.Context, tx storage.Transaction, ti *typedInfo
 	return tx.CreateTable(ctx, ti.tid, ti.tn, ti.colNames, ti.colTypes, ti.primary)
 }
 
-func (tt *typedTable) rows(ctx context.Context, minSt, maxSt interface{},
-	pred storage.Predicate) (*typedRows, error) {
+func (tt *typedTable) rows(ctx context.Context, minSt, maxSt interface{}) (*typedRows, error) {
+	rows, err := tt.tbl.Rows(ctx, nil, tt.ti.structToRow(minSt), tt.ti.structToRow(maxSt), nil)
+	if err != nil {
+		return nil, err
+	}
 
-	// XXX
-	return nil, nil
+	return &typedRows{
+		rows: rows,
+		ti:   tt.ti,
+	}, nil
 }
 
 func (tt *typedTable) insert(ctx context.Context, structs ...interface{}) error {
@@ -302,7 +383,12 @@ func (tt *typedTable) insert(ctx context.Context, structs ...interface{}) error 
 }
 
 func (tr *typedRows) next(ctx context.Context, st interface{}) error {
-	// XXX
+	row, err := tr.rows.Next(ctx)
+	if err != nil {
+		return err
+	}
+
+	tr.ti.rowToStruct(row, st)
 	return nil
 }
 
