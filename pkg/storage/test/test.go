@@ -215,13 +215,12 @@ func selectFunc(t *testing.T, what string, tbl storage.Table, cols []types.Colum
 	}
 }
 
-func testStorage(t *testing.T, tx storage.Transaction, tbl storage.Table,
-	cases []interface{}) storage.Table {
-
+func testStorage(t *testing.T, tx storage.Transaction, cases []interface{}) {
 	t.Helper()
 
 	ctx := context.Background()
 
+	var tbl storage.Table
 	var rows storage.Rows
 	var rowRef storage.RowRef
 	var err error
@@ -477,8 +476,8 @@ func testStorage(t *testing.T, tx storage.Transaction, tbl storage.Table,
 						t.Errorf("UpdateSet(%d).Update() failed with %s", tbl.TID(), err)
 					}
 				})
+		default:
+			panic(fmt.Sprintf("unexpected case: %T %#v", c, c))
 		}
 	}
-
-	return tbl
 }

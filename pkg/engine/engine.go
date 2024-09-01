@@ -79,13 +79,13 @@ func NewEngine(store storage.Store) Engine {
 
 var (
 	sequencesTableName = types.TableName{types.SYSTEM, types.INFO, types.SEQUENCES}
-	sequencesTypedInfo = makeTypedInfo(sequencesTableId, sequencesTableName, sequencesRow{})
+	sequencesTypedInfo = MakeTypedInfo(sequencesTableId, sequencesTableName, sequencesRow{})
 	databasesTableName = types.TableName{types.SYSTEM, types.INFO, types.DATABASES}
-	databasesTypedInfo = makeTypedInfo(databasesTableId, databasesTableName, databasesRow{})
+	databasesTypedInfo = MakeTypedInfo(databasesTableId, databasesTableName, databasesRow{})
 	schemasTableName   = types.TableName{types.SYSTEM, types.INFO, types.SCHEMAS}
-	schemasTypedInfo   = makeTypedInfo(schemasTableId, schemasTableName, schemasRow{})
+	schemasTypedInfo   = MakeTypedInfo(schemasTableId, schemasTableName, schemasRow{})
 	tablesTableName    = types.TableName{types.SYSTEM, types.INFO, types.TABLES}
-	tablesTypedInfo    = makeTypedInfo(tablesTableId, tablesTableName, tablesRow{})
+	tablesTypedInfo    = MakeTypedInfo(tablesTableId, tablesTableName, tablesRow{})
 )
 
 type sequencesRow struct {
@@ -106,7 +106,7 @@ type tablesRow struct {
 	Database string `maho:"size=128,primary"`
 	Schema   string `maho:"size=128,primary"`
 	Table    string `maho:"size=128,primary"`
-	TableID  int64  // storage.TableId
+	TableId  int64  // storage.TableId
 	Type     []byte `maho:"size=8192,notnull"`
 }
 
@@ -118,13 +118,13 @@ func (eng *engine) CreateDatabase(dn types.Identifier, opts storage.OptionsMap) 
 	tx := eng.store.Begin()
 
 	ctx := context.Background()
-	tt, err := openTypedTable(ctx, tx, databasesTypedInfo)
+	tt, err := OpenTypedTable(ctx, tx, databasesTypedInfo)
 	if err != nil {
 		tx.Rollback()
 		return err
 	}
 
-	err = tt.insert(ctx,
+	err = tt.Insert(ctx,
 		&databasesRow{
 			Database: dn.String(),
 		})

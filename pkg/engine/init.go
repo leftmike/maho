@@ -9,7 +9,7 @@ import (
 
 var (
 	initTables = []struct {
-		ti      *typedInfo
+		ti      *TypedInfo
 		structs []interface{}
 	}{
 		{
@@ -53,7 +53,7 @@ var (
 
 func initStore(ctx context.Context, tx storage.Transaction) error {
 	for _, it := range initTables {
-		err := createTypedTable(ctx, tx, it.ti)
+		err := CreateTypedTable(ctx, tx, it.ti)
 		if err != nil {
 			return err
 		}
@@ -62,31 +62,31 @@ func initStore(ctx context.Context, tx storage.Transaction) error {
 			continue
 		}
 
-		tt, err := openTypedTable(ctx, tx, it.ti)
+		tt, err := OpenTypedTable(ctx, tx, it.ti)
 		if err != nil {
 			return err
 		}
-		err = tt.insert(ctx, it.structs...)
+		err = tt.Insert(ctx, it.structs...)
 		if err != nil {
 			return err
 		}
 	}
 
-	tt, err := openTypedTable(ctx, tx, tablesTypedInfo)
+	tt, err := OpenTypedTable(ctx, tx, tablesTypedInfo)
 	if err != nil {
 		return err
 	}
 	for _, it := range initTables {
-		buf, err := it.ti.toTableType().Encode()
+		buf, err := it.ti.TableType().Encode()
 		if err != nil {
 			return err
 		}
-		err = tt.insert(ctx,
+		err = tt.Insert(ctx,
 			&tablesRow{
 				Database: it.ti.tn.Database.String(),
 				Schema:   it.ti.tn.Schema.String(),
 				Table:    it.ti.tn.Table.String(),
-				TableID:  int64(it.ti.tid),
+				TableId:  int64(it.ti.tid),
 				Type:     buf,
 			})
 		if err != nil {

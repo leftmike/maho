@@ -27,7 +27,7 @@ func TestCreateTable(t *testing.T, store string, newStore NewStore) {
 	colNames1 := []types.Identifier{col1, col2}
 	colTypes1 := []types.ColumnType{types.IdColType, types.Int32ColType}
 	primary1 := []types.ColumnKey{types.MakeColumnKey(0, false)}
-	testStorage(t, st.Begin(), nil, []interface{}{
+	testStorage(t, st.Begin(), []interface{}{
 		OpenTable{
 			tid:      storage.EngineTableId + 1,
 			panicked: true,
@@ -54,7 +54,7 @@ func TestCreateTable(t *testing.T, store string, newStore NewStore) {
 		Commit{},
 	})
 
-	testStorage(t, st.Begin(), nil, []interface{}{
+	testStorage(t, st.Begin(), []interface{}{
 		OpenTable{
 			tid:      storage.EngineTableId + 1,
 			colNames: colNames1,
@@ -74,7 +74,7 @@ func TestCreateTable(t *testing.T, store string, newStore NewStore) {
 	colNames2 := []types.Identifier{col1, col2, col3}
 	colTypes2 := []types.ColumnType{types.IdColType, types.Int32ColType, types.StringColType}
 	primary2 := []types.ColumnKey{types.MakeColumnKey(2, false), types.MakeColumnKey(1, true)}
-	testStorage(t, st.Begin(), nil, []interface{}{
+	testStorage(t, st.Begin(), []interface{}{
 		CreateTable{
 			tid:      storage.EngineTableId + 2,
 			colNames: colNames2,
@@ -84,7 +84,7 @@ func TestCreateTable(t *testing.T, store string, newStore NewStore) {
 		Rollback{},
 	})
 
-	testStorage(t, st.Begin(), nil, []interface{}{
+	testStorage(t, st.Begin(), []interface{}{
 		OpenTable{
 			tid:      storage.EngineTableId + 2,
 			panicked: true,
@@ -105,7 +105,7 @@ func TestCreateTable(t *testing.T, store string, newStore NewStore) {
 		Rollback{},
 	})
 
-	testStorage(t, st.Begin(), nil, []interface{}{
+	testStorage(t, st.Begin(), []interface{}{
 		CreateTable{
 			tid:      storage.EngineTableId + 2,
 			colNames: colNames2,
@@ -115,7 +115,7 @@ func TestCreateTable(t *testing.T, store string, newStore NewStore) {
 		Commit{},
 	})
 
-	testStorage(t, st.Begin(), nil, []interface{}{
+	testStorage(t, st.Begin(), []interface{}{
 		OpenTable{
 			tid:      storage.EngineTableId + 1,
 			colNames: colNames1,
@@ -145,7 +145,7 @@ func TestCreateTable(t *testing.T, store string, newStore NewStore) {
 		Rollback{},
 	})
 
-	testStorage(t, st.Begin(), nil, []interface{}{
+	testStorage(t, st.Begin(), []interface{}{
 		CreateTable{
 			tid:      1,
 			panicked: true,
@@ -168,7 +168,7 @@ func TestCreateTable(t *testing.T, store string, newStore NewStore) {
 
 	colNames5 := []types.Identifier{col1, col2, col3}
 	colTypes5 := []types.ColumnType{types.IdColType, types.Int32ColType, types.StringColType}
-	testStorage(t, st.Begin(), nil, []interface{}{
+	testStorage(t, st.Begin(), []interface{}{
 		CreateTable{
 			tid:      storage.EngineTableId + 5,
 			colNames: colNames5,
@@ -198,7 +198,7 @@ func TestDropTable(t *testing.T, store string, newStore NewStore) {
 	colNames := []types.Identifier{col1, col2}
 	colTypes := []types.ColumnType{types.IdColType, types.Int32ColType}
 	primary := []types.ColumnKey{types.MakeColumnKey(0, false)}
-	testStorage(t, st.Begin(), nil, []interface{}{
+	testStorage(t, st.Begin(), []interface{}{
 		DropTable{
 			tid:      storage.EngineTableId + 1,
 			panicked: true,
@@ -230,7 +230,7 @@ func TestDropTable(t *testing.T, store string, newStore NewStore) {
 		Commit{},
 	})
 
-	testStorage(t, st.Begin(), nil, []interface{}{
+	testStorage(t, st.Begin(), []interface{}{
 		OpenTable{
 			tid:      storage.EngineTableId + 1,
 			colNames: colNames,
@@ -247,7 +247,7 @@ func TestDropTable(t *testing.T, store string, newStore NewStore) {
 		Rollback{},
 	})
 
-	testStorage(t, st.Begin(), nil, []interface{}{
+	testStorage(t, st.Begin(), []interface{}{
 		OpenTable{
 			tid:      storage.EngineTableId + 1,
 			colNames: colNames,
@@ -264,7 +264,7 @@ func TestDropTable(t *testing.T, store string, newStore NewStore) {
 		Commit{},
 	})
 
-	testStorage(t, st.Begin(), nil, []interface{}{
+	testStorage(t, st.Begin(), []interface{}{
 		OpenTable{
 			tid:      storage.EngineTableId + 1,
 			panicked: true,
@@ -294,7 +294,7 @@ func TestInsert(t *testing.T, store string, newStore NewStore) {
 		types.ColumnType{Type: types.Int64Type, Size: 4},
 	}
 	primary := []types.ColumnKey{types.MakeColumnKey(0, false)}
-	testStorage(t, st.Begin(), nil, []interface{}{
+	testStorage(t, st.Begin(), []interface{}{
 		CreateTable{
 			tid:      storage.EngineTableId + 1,
 			colNames: colNames,
@@ -304,7 +304,7 @@ func TestInsert(t *testing.T, store string, newStore NewStore) {
 		Commit{},
 	})
 
-	testStorage(t, st.Begin(), nil, []interface{}{
+	testStorage(t, st.Begin(), []interface{}{
 		OpenTable{
 			tid:      storage.EngineTableId + 1,
 			colNames: colNames,
@@ -320,7 +320,7 @@ func TestInsert(t *testing.T, store string, newStore NewStore) {
 		Commit{},
 	})
 
-	testStorage(t, st.Begin(), nil, []interface{}{
+	testStorage(t, st.Begin(), []interface{}{
 		OpenTable{
 			tid:      storage.EngineTableId + 1,
 			colNames: colNames,
@@ -337,7 +337,7 @@ func TestInsert(t *testing.T, store string, newStore NewStore) {
 		Commit{},
 	})
 
-	testStorage(t, st.Begin(), nil, []interface{}{
+	testStorage(t, st.Begin(), []interface{}{
 		OpenTable{
 			tid:      storage.EngineTableId + 1,
 			colNames: colNames,
@@ -352,7 +352,7 @@ func TestInsert(t *testing.T, store string, newStore NewStore) {
 		Rollback{},
 	})
 
-	testStorage(t, st.Begin(), nil, []interface{}{
+	testStorage(t, st.Begin(), []interface{}{
 		OpenTable{
 			tid:      storage.EngineTableId + 1,
 			colNames: colNames,
@@ -367,7 +367,7 @@ func TestInsert(t *testing.T, store string, newStore NewStore) {
 		Rollback{},
 	})
 
-	testStorage(t, st.Begin(), nil, []interface{}{
+	testStorage(t, st.Begin(), []interface{}{
 		OpenTable{
 			tid:      storage.EngineTableId + 1,
 			colNames: colNames,
@@ -433,7 +433,7 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 	}
 	primary1 := []types.ColumnKey{types.MakeColumnKey(0, false)}
 
-	testStorage(t, st.Begin(), nil, []interface{}{
+	testStorage(t, st.Begin(), []interface{}{
 		CreateTable{
 			tid:      storage.EngineTableId + 1,
 			colNames: colNames1,
@@ -443,7 +443,7 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 		Commit{},
 	})
 
-	testStorage(t, st.Begin(), nil, []interface{}{
+	testStorage(t, st.Begin(), []interface{}{
 		OpenTable{
 			tid:      storage.EngineTableId + 1,
 			colNames: colNames1,
@@ -462,7 +462,7 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 		Commit{},
 	})
 
-	testStorage(t, st.Begin(), nil, []interface{}{
+	testStorage(t, st.Begin(), []interface{}{
 		OpenTable{
 			tid:      storage.EngineTableId + 1,
 			colNames: colNames1,
@@ -485,7 +485,7 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 		Commit{},
 	})
 
-	testStorage(t, st.Begin(), nil, []interface{}{
+	testStorage(t, st.Begin(), []interface{}{
 		OpenTable{
 			tid:      storage.EngineTableId + 1,
 			colNames: colNames1,
@@ -500,7 +500,7 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 		Rollback{},
 	})
 
-	testStorage(t, st.Begin(), nil, []interface{}{
+	testStorage(t, st.Begin(), []interface{}{
 		OpenTable{
 			tid:      storage.EngineTableId + 1,
 			colNames: colNames1,
@@ -516,7 +516,7 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 		Rollback{},
 	})
 
-	testStorage(t, st.Begin(), nil, []interface{}{
+	testStorage(t, st.Begin(), []interface{}{
 		OpenTable{
 			tid:      storage.EngineTableId + 1,
 			colNames: colNames1,
@@ -533,7 +533,7 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 		Rollback{},
 	})
 
-	testStorage(t, st.Begin(), nil, []interface{}{
+	testStorage(t, st.Begin(), []interface{}{
 		OpenTable{
 			tid:      storage.EngineTableId + 1,
 			colNames: colNames1,
@@ -549,7 +549,7 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 		Rollback{},
 	})
 
-	testStorage(t, st.Begin(), nil, []interface{}{
+	testStorage(t, st.Begin(), []interface{}{
 		OpenTable{
 			tid:      storage.EngineTableId + 1,
 			colNames: colNames1,
@@ -565,7 +565,7 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 		Rollback{},
 	})
 
-	testStorage(t, st.Begin(), nil, []interface{}{
+	testStorage(t, st.Begin(), []interface{}{
 		OpenTable{
 			tid:      storage.EngineTableId + 1,
 			colNames: colNames1,
@@ -581,7 +581,7 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 		Commit{},
 	})
 
-	testStorage(t, st.Begin(), nil, []interface{}{
+	testStorage(t, st.Begin(), []interface{}{
 		OpenTable{
 			tid:      storage.EngineTableId + 1,
 			colNames: colNames1,
@@ -598,7 +598,7 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 		Commit{},
 	})
 
-	testStorage(t, st.Begin(), nil, []interface{}{
+	testStorage(t, st.Begin(), []interface{}{
 		OpenTable{
 			tid:      storage.EngineTableId + 1,
 			colNames: colNames1,
@@ -615,7 +615,7 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 		Commit{},
 	})
 
-	testStorage(t, st.Begin(), nil, []interface{}{
+	testStorage(t, st.Begin(), []interface{}{
 		OpenTable{
 			tid:      storage.EngineTableId + 1,
 			colNames: colNames1,
@@ -633,7 +633,7 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 		Commit{},
 	})
 
-	testStorage(t, st.Begin(), nil, []interface{}{
+	testStorage(t, st.Begin(), []interface{}{
 		OpenTable{
 			tid:      storage.EngineTableId + 1,
 			colNames: colNames1,
@@ -651,7 +651,7 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 		Commit{},
 	})
 
-	testStorage(t, st.Begin(), nil, []interface{}{
+	testStorage(t, st.Begin(), []interface{}{
 		OpenTable{
 			tid:      storage.EngineTableId + 1,
 			colNames: colNames1,
@@ -671,7 +671,7 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 		Commit{},
 	})
 
-	testStorage(t, st.Begin(), nil, []interface{}{
+	testStorage(t, st.Begin(), []interface{}{
 		OpenTable{
 			tid:      storage.EngineTableId + 1,
 			colNames: colNames1,
@@ -698,7 +698,7 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 	}
 	primary2 := []types.ColumnKey{types.MakeColumnKey(0, false)}
 
-	testStorage(t, st.Begin(), nil, []interface{}{
+	testStorage(t, st.Begin(), []interface{}{
 		CreateTable{
 			tid:      storage.EngineTableId + 2,
 			colNames: colNames2,
@@ -708,7 +708,7 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 		Commit{},
 	})
 
-	testStorage(t, st.Begin(), nil, []interface{}{
+	testStorage(t, st.Begin(), []interface{}{
 		OpenTable{
 			tid:      storage.EngineTableId + 2,
 			colNames: colNames2,
@@ -728,7 +728,7 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 		Commit{},
 	})
 
-	testStorage(t, st.Begin(), nil, []interface{}{
+	testStorage(t, st.Begin(), []interface{}{
 		OpenTable{
 			tid:      storage.EngineTableId + 2,
 			colNames: colNames2,
@@ -747,7 +747,7 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 		Commit{},
 	})
 
-	testStorage(t, st.Begin(), nil, []interface{}{
+	testStorage(t, st.Begin(), []interface{}{
 		OpenTable{
 			tid:      storage.EngineTableId + 2,
 			colNames: colNames2,
@@ -767,7 +767,7 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 		Commit{},
 	})
 
-	testStorage(t, st.Begin(), nil, []interface{}{
+	testStorage(t, st.Begin(), []interface{}{
 		OpenTable{
 			tid:      storage.EngineTableId + 2,
 			colNames: colNames2,
@@ -786,7 +786,7 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 		Commit{},
 	})
 
-	testStorage(t, st.Begin(), nil, []interface{}{
+	testStorage(t, st.Begin(), []interface{}{
 		OpenTable{
 			tid:      storage.EngineTableId + 2,
 			colNames: colNames2,
@@ -808,7 +808,7 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 		Commit{},
 	})
 
-	testStorage(t, st.Begin(), nil, []interface{}{
+	testStorage(t, st.Begin(), []interface{}{
 		OpenTable{
 			tid:      storage.EngineTableId + 2,
 			colNames: colNames2,
@@ -827,7 +827,7 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 		Commit{},
 	})
 
-	testStorage(t, st.Begin(), nil, []interface{}{
+	testStorage(t, st.Begin(), []interface{}{
 		OpenTable{
 			tid:      storage.EngineTableId + 2,
 			colNames: colNames2,
@@ -847,7 +847,7 @@ func TestRows(t *testing.T, store string, newStore NewStore) {
 		Commit{},
 	})
 
-	testStorage(t, st.Begin(), nil, []interface{}{
+	testStorage(t, st.Begin(), []interface{}{
 		OpenTable{
 			tid:      storage.EngineTableId + 2,
 			colNames: colNames2,
@@ -883,7 +883,7 @@ func TestDelete(t *testing.T, store string, newStore NewStore) {
 	}
 	primary := []types.ColumnKey{types.MakeColumnKey(0, false)}
 
-	testStorage(t, st.Begin(), nil, []interface{}{
+	testStorage(t, st.Begin(), []interface{}{
 		CreateTable{
 			tid:      storage.EngineTableId + 1,
 			colNames: colNames,
@@ -893,7 +893,7 @@ func TestDelete(t *testing.T, store string, newStore NewStore) {
 		Commit{},
 	})
 
-	testStorage(t, st.Begin(), nil, []interface{}{
+	testStorage(t, st.Begin(), []interface{}{
 		OpenTable{
 			tid:      storage.EngineTableId + 1,
 			colNames: colNames,
@@ -912,7 +912,7 @@ func TestDelete(t *testing.T, store string, newStore NewStore) {
 		Commit{},
 	})
 
-	testStorage(t, st.Begin(), nil, []interface{}{
+	testStorage(t, st.Begin(), []interface{}{
 		OpenTable{
 			tid:      storage.EngineTableId + 1,
 			colNames: colNames,
@@ -928,7 +928,7 @@ func TestDelete(t *testing.T, store string, newStore NewStore) {
 		Commit{},
 	})
 
-	testStorage(t, st.Begin(), nil, []interface{}{
+	testStorage(t, st.Begin(), []interface{}{
 		OpenTable{
 			tid:      storage.EngineTableId + 1,
 			colNames: colNames,
@@ -960,7 +960,7 @@ func TestDelete(t *testing.T, store string, newStore NewStore) {
 		Commit{},
 	})
 
-	testStorage(t, st.Begin(), nil, []interface{}{
+	testStorage(t, st.Begin(), []interface{}{
 		OpenTable{
 			tid:      storage.EngineTableId + 1,
 			colNames: colNames,
@@ -989,7 +989,7 @@ func TestDelete(t *testing.T, store string, newStore NewStore) {
 		Rollback{},
 	})
 
-	testStorage(t, st.Begin(), nil, []interface{}{
+	testStorage(t, st.Begin(), []interface{}{
 		OpenTable{
 			tid:      storage.EngineTableId + 1,
 			colNames: colNames,
@@ -1006,7 +1006,7 @@ func TestDelete(t *testing.T, store string, newStore NewStore) {
 		Rollback{},
 	})
 
-	testStorage(t, st.Begin(), nil, []interface{}{
+	testStorage(t, st.Begin(), []interface{}{
 		OpenTable{
 			tid:      storage.EngineTableId + 1,
 			colNames: colNames,
@@ -1040,7 +1040,7 @@ func TestUpdate(t *testing.T, store string, newStore NewStore) {
 	}
 	primary := []types.ColumnKey{types.MakeColumnKey(0, false)}
 
-	testStorage(t, st.Begin(), nil, []interface{}{
+	testStorage(t, st.Begin(), []interface{}{
 		CreateTable{
 			tid:      storage.EngineTableId + 1,
 			colNames: colNames,
@@ -1050,7 +1050,7 @@ func TestUpdate(t *testing.T, store string, newStore NewStore) {
 		Commit{},
 	})
 
-	testStorage(t, st.Begin(), nil, []interface{}{
+	testStorage(t, st.Begin(), []interface{}{
 		OpenTable{
 			tid:      storage.EngineTableId + 1,
 			colNames: colNames,
@@ -1067,7 +1067,7 @@ func TestUpdate(t *testing.T, store string, newStore NewStore) {
 		Commit{},
 	})
 
-	testStorage(t, st.Begin(), nil, []interface{}{
+	testStorage(t, st.Begin(), []interface{}{
 		OpenTable{
 			tid:      storage.EngineTableId + 1,
 			colNames: colNames,
@@ -1086,7 +1086,7 @@ func TestUpdate(t *testing.T, store string, newStore NewStore) {
 		Commit{},
 	})
 
-	testStorage(t, st.Begin(), nil, []interface{}{
+	testStorage(t, st.Begin(), []interface{}{
 		OpenTable{
 			tid:      storage.EngineTableId + 1,
 			colNames: colNames,
@@ -1120,7 +1120,7 @@ func TestUpdate(t *testing.T, store string, newStore NewStore) {
 		Commit{},
 	})
 
-	testStorage(t, st.Begin(), nil, []interface{}{
+	testStorage(t, st.Begin(), []interface{}{
 		OpenTable{
 			tid:      storage.EngineTableId + 1,
 			colNames: colNames,
@@ -1153,7 +1153,7 @@ func TestUpdate(t *testing.T, store string, newStore NewStore) {
 		Rollback{},
 	})
 
-	testStorage(t, st.Begin(), nil, []interface{}{
+	testStorage(t, st.Begin(), []interface{}{
 		OpenTable{
 			tid:      storage.EngineTableId + 1,
 			colNames: colNames,
@@ -1170,7 +1170,7 @@ func TestUpdate(t *testing.T, store string, newStore NewStore) {
 		Rollback{},
 	})
 
-	testStorage(t, st.Begin(), nil, []interface{}{
+	testStorage(t, st.Begin(), []interface{}{
 		OpenTable{
 			tid:      storage.EngineTableId + 1,
 			colNames: colNames,
@@ -1189,7 +1189,7 @@ func TestUpdate(t *testing.T, store string, newStore NewStore) {
 		Rollback{},
 	})
 
-	testStorage(t, st.Begin(), nil, []interface{}{
+	testStorage(t, st.Begin(), []interface{}{
 		OpenTable{
 			tid:      storage.EngineTableId + 1,
 			colNames: colNames,
@@ -1224,7 +1224,7 @@ func TestTable(t *testing.T, store string, newStore NewStore) {
 	}
 	primary := []types.ColumnKey{types.MakeColumnKey(0, false)}
 
-	testStorage(t, st.Begin(), nil, []interface{}{
+	testStorage(t, st.Begin(), []interface{}{
 		CreateTable{
 			tid:      storage.EngineTableId + 1,
 			colNames: colNames,
@@ -1245,7 +1245,7 @@ func TestTable(t *testing.T, store string, newStore NewStore) {
 			})
 	}
 
-	testStorage(t, st.Begin(), nil, []interface{}{
+	testStorage(t, st.Begin(), []interface{}{
 		OpenTable{
 			tid:      storage.EngineTableId + 1,
 			colNames: colNames,
@@ -1258,7 +1258,7 @@ func TestTable(t *testing.T, store string, newStore NewStore) {
 		Commit{},
 	})
 
-	testStorage(t, st.Begin(), nil, []interface{}{
+	testStorage(t, st.Begin(), []interface{}{
 		OpenTable{
 			tid:      storage.EngineTableId + 1,
 			colNames: colNames,
@@ -1271,7 +1271,7 @@ func TestTable(t *testing.T, store string, newStore NewStore) {
 		Commit{},
 	})
 
-	testStorage(t, st.Begin(), nil, []interface{}{
+	testStorage(t, st.Begin(), []interface{}{
 		OpenTable{
 			tid:      storage.EngineTableId + 1,
 			colNames: colNames,
@@ -1296,7 +1296,7 @@ func TestTable(t *testing.T, store string, newStore NewStore) {
 		}
 	}
 
-	testStorage(t, st.Begin(), nil, []interface{}{
+	testStorage(t, st.Begin(), []interface{}{
 		OpenTable{
 			tid:      storage.EngineTableId + 1,
 			colNames: colNames,
@@ -1309,7 +1309,7 @@ func TestTable(t *testing.T, store string, newStore NewStore) {
 		Commit{},
 	})
 
-	testStorage(t, st.Begin(), nil, []interface{}{
+	testStorage(t, st.Begin(), []interface{}{
 		OpenTable{
 			tid:      storage.EngineTableId + 1,
 			colNames: colNames,
@@ -1333,7 +1333,7 @@ func TestTable(t *testing.T, store string, newStore NewStore) {
 	}
 	rows = nrows
 
-	testStorage(t, st.Begin(), nil, []interface{}{
+	testStorage(t, st.Begin(), []interface{}{
 		OpenTable{
 			tid:      storage.EngineTableId + 1,
 			colNames: colNames,

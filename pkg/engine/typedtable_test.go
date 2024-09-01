@@ -1,42 +1,33 @@
-package engine
+package engine_test
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"reflect"
 	"testing"
 
+	"github.com/leftmike/maho/pkg/engine"
 	"github.com/leftmike/maho/pkg/storage"
 	"github.com/leftmike/maho/pkg/storage/basic"
 	u "github.com/leftmike/maho/pkg/testutil"
 	"github.com/leftmike/maho/pkg/types"
 )
 
-func typedInfoPanicked(fn func() *typedInfo) (ti *typedInfo, panicked bool) {
-	defer func() {
-		if r := recover(); r != nil {
-			if _, ok := r.(string); ok {
-				panicked = true
-			} else {
-				panic(r)
-			}
-		}
-	}()
+func allRows(t *testing.T, tx storage.Transaction, tid storage.TableId, tn types.TableName,
+	ti *engine.TypedInfo) []types.Row {
 
-	return fn(), false
-}
-
-func allRows(t *testing.T, tx storage.Transaction, ti *typedInfo) []types.Row {
 	t.Helper()
 
 	ctx := context.Background()
-	tbl, err := tx.OpenTable(ctx, ti.tid, ti.tn, ti.colNames, ti.colTypes, ti.primary)
+	tt := ti.TableType()
+	tbl, err := tx.OpenTable(ctx, tid, tn, tt.ColumnNames, tt.ColumnTypes, tt.Key)
 	if err != nil {
-		t.Fatalf("OpenTable(%d) failed with %s", ti.tid, err)
+		t.Fatalf("OpenTable(%d) failed with %s", tid, err)
 	}
 	rows, err := tbl.Rows(ctx, nil, nil, nil, nil)
 	if err != nil {
-		t.Fatalf("Rows(%d) failed with %s", ti.tid, err)
+		t.Fatalf("Rows(%d) failed with %s", tid, err)
 	}
 
 	var all []types.Row
@@ -45,7 +36,7 @@ func allRows(t *testing.T, tx storage.Transaction, ti *typedInfo) []types.Row {
 		if err == io.EOF {
 			break
 		} else if err != nil {
-			t.Fatalf("Next(%d) failed with %s", ti.tid, err)
+			t.Fatalf("Next(%d) failed with %s", tid, err)
 		}
 
 		all = append(all, row)
@@ -53,201 +44,10 @@ func allRows(t *testing.T, tx storage.Transaction, ti *typedInfo) []types.Row {
 
 	err = rows.Close(ctx)
 	if err != nil {
-		t.Fatalf("Close(%d) failed with %s", ti.tid, err)
+		t.Fatalf("Close(%d) failed with %s", tid, err)
 	}
 
 	return all
-}
-
-func TestMakeTypedTableInfo(t *testing.T) {
-	tn := types.TableName{
-		Database: types.ID("db", false),
-		Schema:   types.ID("scm", false),
-		Table:    types.ID("tbl", false),
-	}
-
-	cases := []struct {
-		tid      storage.TableId
-		tn       types.TableName
-		row      interface{}
-		ti       *typedInfo
-		panicked bool
-	}{
-		{row: 123, panicked: true},
-		{row: struct{}{}, ti: &typedInfo{}},
-		{row: struct{ aBC int }{}, panicked: true},
-		{
-			row: struct {
-				Abc int `maho:"notnull,name=ghi=jkl,primary"`
-			}{},
-			panicked: true,
-		},
-		{
-			row: struct {
-				Abc int `maho:"notnull=true"`
-			}{},
-			panicked: true,
-		},
-		{
-			row: struct {
-				Abc int `maho:"name"`
-			}{},
-			panicked: true,
-		},
-		{
-			row: struct {
-				Abc int `maho:"size=abc"`
-			}{},
-			panicked: true,
-		},
-		{
-			row: struct {
-				Abc []int16
-			}{},
-			panicked: true,
-		},
-		{
-			row: struct {
-				Abc [8]byte
-			}{},
-			panicked: true,
-		},
-		{
-			row: struct {
-				Abc *[]byte
-			}{},
-			panicked: true,
-		},
-		{
-			row: struct {
-				Abc uint
-			}{},
-			panicked: true,
-		},
-		{
-			row: struct {
-				Abc int `maho:"notnull"`
-			}{},
-			panicked: true,
-		},
-		{
-			tid: maxReservedTableId + 1,
-			tn:  tn,
-			row: struct {
-				ColNum   int8    `db:"name,primary=123"`
-				Database string  `maho:"size=123"`
-				Abcdef   *string `maho:"size=45"`
-				AbcID    []byte  `maho:"size=16"`
-				Aaaaa    []byte  `maho:"size=32,notnull"`
-				ABCDEF   *int32
-				DefGHi   int16 `maho:"name=DEFGHI"`
-			}{},
-			ti: &typedInfo{
-				tid: maxReservedTableId + 1,
-				tn:  tn,
-				colNames: []types.Identifier{
-					types.ID("col_num", true),
-					types.ID("database", true),
-					types.ID("abcdef", true),
-					types.ID("abc_id", true),
-					types.ID("aaaaa", true),
-					types.ID("abcdef", true),
-					types.ID("DEFGHI", true),
-				},
-				colTypes: []types.ColumnType{
-					{Type: types.Int64Type, Size: 1, NotNull: true},
-					{Type: types.StringType, Size: 123, NotNull: true},
-					{Type: types.StringType, Size: 45},
-					{Type: types.BytesType, Size: 16},
-					{Type: types.BytesType, Size: 32, NotNull: true},
-					{Type: types.Int64Type, Size: 4},
-					{Type: types.Int64Type, Size: 2, NotNull: true},
-				},
-				fldNames: []string{
-					"ColNum",
-					"Database",
-					"Abcdef",
-					"AbcID",
-					"Aaaaa",
-					"ABCDEF",
-					"DefGHi",
-				},
-			},
-		},
-		{
-			row: &struct {
-				Name  string
-				Field string `db:"novalue"`
-			}{},
-			ti: &typedInfo{
-				colNames: []types.Identifier{types.ID("name", true), types.ID("field", true)},
-				colTypes: []types.ColumnType{
-					{Type: types.StringType, Size: 1, NotNull: true},
-					{Type: types.StringType, Size: 1, NotNull: true},
-				},
-				fldNames: []string{"Name", "Field"},
-			},
-		},
-		{
-			row: sequencesRow{},
-			ti: &typedInfo{
-				colNames: []types.Identifier{
-					types.ID("sequence", true),
-					types.ID("current", true),
-				},
-				colTypes: []types.ColumnType{
-					{Type: types.StringType, Size: 128, NotNull: true},
-					{Type: types.Int64Type, Size: 8, NotNull: true},
-				},
-				primary:  []types.ColumnKey{types.MakeColumnKey(0, false)},
-				fldNames: []string{"Sequence", "Current"},
-			},
-		},
-		{
-			row: &tablesRow{},
-			ti: &typedInfo{
-				colNames: []types.Identifier{
-					types.ID("database", true),
-					types.ID("schema", true),
-					types.ID("table", true),
-					types.ID("table_id", true),
-					types.ID("type", true),
-				},
-				colTypes: []types.ColumnType{
-					{Type: types.StringType, Size: 128, NotNull: true},
-					{Type: types.StringType, Size: 128, NotNull: true},
-					{Type: types.StringType, Size: 128, NotNull: true},
-					{Type: types.Int64Type, Size: 8, NotNull: true},
-					{Type: types.BytesType, Size: 8192, NotNull: true},
-				},
-				primary: []types.ColumnKey{
-					types.MakeColumnKey(0, false),
-					types.MakeColumnKey(1, false),
-					types.MakeColumnKey(2, false),
-				},
-				fldNames: []string{"Database", "Schema", "Table", "TableID", "Type"},
-			},
-		},
-	}
-
-	for _, c := range cases {
-		ti, panicked := typedInfoPanicked(func() *typedInfo {
-			return makeTypedInfo(c.tid, c.tn, c.row)
-		})
-		if panicked {
-			if !c.panicked {
-				t.Errorf("makeTypedTableInfo(%#v) panicked", c.row)
-			}
-		} else if c.panicked {
-			t.Errorf("makeTypedTableInfo(%#v) did not panic", c.row)
-		} else {
-			ti.typ = nil
-
-			if !reflect.DeepEqual(ti, c.ti) {
-				t.Errorf("makeTypedTableInfo(%#v) got %#v want %#v", c.row, ti, c.ti)
-			}
-		}
-	}
 }
 
 type testRow struct {
@@ -262,7 +62,9 @@ type testRow struct {
 	Col8 *int64
 }
 
-func testRows(t *testing.T, tt *typedTable, structs []testRow, min, max int) {
+func testRows(t *testing.T, tn types.TableName, tt *engine.TypedTable, structs []testRow,
+	min, max int) {
+
 	ctx := context.Background()
 
 	var minSt, maxSt interface{}
@@ -276,44 +78,46 @@ func testRows(t *testing.T, tt *typedTable, structs []testRow, min, max int) {
 	} else {
 		maxSt = &testRow{Col0: max}
 	}
-	tr, err := tt.rows(ctx, minSt, maxSt)
+	tr, err := tt.Rows(ctx, minSt, maxSt)
 	if err != nil {
-		t.Fatalf("rows(%s) failed with %s", tt.ti.tn, err)
+		t.Fatalf("rows(%s) failed with %s", tn, err)
 	}
 	defer func() {
-		err := tr.close(ctx)
+		err := tr.Close(ctx)
 		if err != nil {
-			t.Fatalf("close(%s) failed with %s", tt.ti.tn, err)
+			t.Fatalf("close(%s) failed with %s", tn, err)
 		}
 	}()
 
 	for idx := min; idx <= max; idx += 1 {
 		st := structs[idx]
 		var trow testRow
-		err = tr.next(ctx, &trow)
+		err = tr.Next(ctx, &trow)
 		if err != nil {
-			t.Errorf("next(%s) failed with %s", tt.ti.tn, err)
+			t.Errorf("next(%s) failed with %s", tn, err)
 		} else if !reflect.DeepEqual(trow, st) {
-			t.Errorf("next(%s) got %#v want %#v", tt.ti.tn, trow, st)
+			t.Errorf("next(%s) got %#v want %#v", tn, trow, st)
 		}
 	}
 
 	var trow testRow
-	err = tr.next(ctx, &trow)
+	err = tr.Next(ctx, &trow)
 	if err != io.EOF {
-		t.Errorf("next(%s) got %s want io.EOF", tt.ti.tn, err)
+		t.Errorf("next(%s) got %s want io.EOF", tn, err)
 	}
 }
 
-func testLookup(t *testing.T, tt *typedTable, structs []testRow, idx int) {
+func testLookup(t *testing.T, tn types.TableName, tt *engine.TypedTable, structs []testRow,
+	idx int) {
+
 	ctx := context.Background()
 
 	trow := testRow{Col0: idx}
-	err := tt.lookup(ctx, &trow)
+	err := tt.Lookup(ctx, &trow)
 	if err != nil {
-		t.Errorf("lookup(%s) failed with %s", tt.ti.tn, err)
+		t.Errorf("lookup(%s) failed with %s", tn, err)
 	} else if !reflect.DeepEqual(trow, structs[idx]) {
-		t.Errorf("lookup(%s) got %#v want %#v", tt.ti.tn, trow, structs[idx])
+		t.Errorf("lookup(%s) got %#v want %#v", tn, trow, structs[idx])
 	}
 }
 
@@ -346,9 +150,9 @@ func TestTypedTable(t *testing.T) {
 		{u.I(2), u.B(false), u.S(""), u.S("xyz"), u.Bytes(), nil, u.F(0), u.I(0), u.I(1234)},
 	}
 
-	tid := maxReservedTableId + 1
+	tid := storage.TableId(2048)
 	tn := types.TableName{types.ID("d", false), types.ID("s", false), types.ID("t", false)}
-	ti := makeTypedInfo(tid, tn, structs[0])
+	ti := engine.MakeTypedInfo(tid, tn, structs[0])
 
 	dataDir := t.TempDir()
 	store, err := basic.NewStore(dataDir)
@@ -358,18 +162,18 @@ func TestTypedTable(t *testing.T) {
 
 	ctx := context.Background()
 	tx := store.Begin()
-	err = createTypedTable(ctx, tx, ti)
+	err = engine.CreateTypedTable(ctx, tx, ti)
 	if err != nil {
-		t.Fatalf("createTypedTable(%s) failed with %s", tn, err)
+		t.Fatalf("CreateTypedTable(%s) failed with %s", tn, err)
 	}
 
-	tt, err := openTypedTable(ctx, tx, ti)
+	tt, err := engine.OpenTypedTable(ctx, tx, ti)
 	if err != nil {
-		t.Fatalf("openTypedTable(%s) failed with %s", tn, err)
+		t.Fatalf("OpenTypedTable(%s) failed with %s", tn, err)
 	}
 
 	for _, st := range structs {
-		err = tt.insert(ctx, &st)
+		err = tt.Insert(ctx, &st)
 		if err != nil {
 			t.Errorf("insert(%#v) failed with %s", st, err)
 		}
@@ -381,7 +185,7 @@ func TestTypedTable(t *testing.T) {
 	}
 
 	tx = store.Begin()
-	all := allRows(t, tx, ti)
+	all := allRows(t, tx, tid, tn, ti)
 	err = tx.Commit(ctx)
 	if err != nil {
 		t.Fatalf("Commit() failed with %s", err)
@@ -392,22 +196,72 @@ func TestTypedTable(t *testing.T) {
 	}
 
 	tx = store.Begin()
-	tt, err = openTypedTable(ctx, tx, ti)
+	tt, err = engine.OpenTypedTable(ctx, tx, ti)
 	if err != nil {
-		t.Fatalf("openTypedTable(%s) failed with %s", tn, err)
+		t.Fatalf("OpenTypedTable(%s) failed with %s", tn, err)
 	}
 
-	testRows(t, tt, structs, -1, -1)
-	testRows(t, tt, structs, 1, -1)
-	testRows(t, tt, structs, -1, 1)
-	testRows(t, tt, structs, 2, 2)
+	testRows(t, tn, tt, structs, -1, -1)
+	testRows(t, tn, tt, structs, 1, -1)
+	testRows(t, tn, tt, structs, -1, 1)
+	testRows(t, tn, tt, structs, 2, 2)
 
-	testLookup(t, tt, structs, 0)
-	testLookup(t, tt, structs, 1)
-	testLookup(t, tt, structs, 2)
+	testLookup(t, tn, tt, structs, 0)
+	testLookup(t, tn, tt, structs, 1)
+	testLookup(t, tn, tt, structs, 2)
 
 	err = tx.Commit(ctx)
 	if err != nil {
 		t.Fatalf("Commit() failed with %s", err)
+	}
+}
+
+type openTypedTable struct {
+	ti   *engine.TypedInfo
+	fail bool
+}
+
+type createTypedTable struct {
+	ti   *engine.TypedInfo
+	fail bool
+}
+
+func testTypedTables(t *testing.T, tx storage.Transaction, cases []interface{}) {
+	t.Helper()
+
+	ctx := context.Background()
+
+	var tt *engine.TypedTable
+	_ = tt
+	//var tr *engine.TypedRows
+	//var trr *engine.TypedRowRef
+	var err error
+	for _, c := range cases {
+		switch c := c.(type) {
+		case openTypedTable:
+			tt, err = engine.OpenTypedTable(ctx, tx, c.ti)
+			if c.fail {
+				if err == nil {
+					t.Errorf("OpenTypedTable(%s, %d) did not fail", c.ti.TableName(),
+						c.ti.TableId())
+				}
+			} else if err != nil {
+				t.Errorf("OpenTypedTable(%s, %d) failed with %s", c.ti.TableName(),
+					c.ti.TableId(), err)
+			}
+		case createTypedTable:
+			err = engine.CreateTypedTable(ctx, tx, c.ti)
+			if c.fail {
+				if err == nil {
+					t.Errorf("CreateTypedTable(%s, %d) did not fail", c.ti.TableName(),
+						c.ti.TableId())
+				}
+			} else if err != nil {
+				t.Errorf("CreateTypedTable(%s, %d) failed with %s", c.ti.TableName(),
+					c.ti.TableId(), err)
+			}
+		default:
+			panic(fmt.Sprintf("unexpected case: %T %#v", c, c))
+		}
 	}
 }

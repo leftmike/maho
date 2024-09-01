@@ -3,201 +3,12 @@ package engine
 import (
 	"context"
 	"fmt"
-	"io"
 	"reflect"
 	"slices"
-	"strconv"
-	"strings"
-	"unicode"
 
 	"github.com/leftmike/maho/pkg/storage"
 	"github.com/leftmike/maho/pkg/types"
 )
-
-type typedInfo struct {
-	typ      reflect.Type
-	tid      storage.TableId
-	tn       types.TableName
-	colNames []types.Identifier
-	colTypes []types.ColumnType
-	primary  []types.ColumnKey
-	fldNames []string
-}
-
-func fieldNameToColumnName(n string) types.Identifier {
-	s := strings.NewReader(n)
-	r, _, err := s.ReadRune()
-	if err != nil {
-		panic(fmt.Sprintf("typed table: bad field name: %s: %s", n, err))
-	}
-	if !unicode.IsUpper(r) {
-		panic(fmt.Sprintf("typed table: bad field name: %s", n))
-	}
-
-	var buf strings.Builder
-	buf.WriteRune(unicode.ToLower(r))
-
-	upper := true
-	for {
-		r, _, err = s.ReadRune()
-		if err == io.EOF {
-			break
-		} else if err != nil {
-			panic(fmt.Sprintf("typed table: bad field name: %s: %s", n, err))
-		}
-
-		if unicode.IsUpper(r) {
-			if !upper {
-				buf.WriteRune('_')
-			}
-			buf.WriteRune(unicode.ToLower(r))
-			upper = true
-		} else {
-			buf.WriteRune(r)
-			upper = false
-		}
-	}
-
-	return types.ID(buf.String(), true)
-}
-
-var (
-	validTags = map[string]bool{
-		"name":    true,
-		"notnull": false,
-		"primary": false,
-		"size":    true,
-	}
-)
-
-func fieldTags(s string) map[string]string {
-	if s == "" {
-		return nil
-	}
-
-	tags := map[string]string{}
-	flds := strings.Split(s, ",")
-	for _, fld := range flds {
-		kv := strings.Split(fld, "=")
-		hasKV, ok := validTags[kv[0]]
-		if !ok || (hasKV && len(kv) != 2) || (!hasKV && len(kv) != 1) {
-			panic(fmt.Sprintf("typed table: bad struct field tag: %s", fld))
-		}
-
-		if hasKV {
-			tags[kv[0]] = kv[1]
-		} else {
-			tags[kv[0]] = ""
-		}
-	}
-
-	return tags
-}
-
-func makeTypedInfo(tid storage.TableId, tn types.TableName, st interface{}) *typedInfo {
-	typ := reflect.TypeOf(st)
-	if typ.Kind() == reflect.Pointer {
-		typ = typ.Elem()
-	}
-
-	if typ.Kind() != reflect.Struct {
-		panic(fmt.Sprintf("typed table: not a struct or a pointer to a struct: %T", st))
-	}
-
-	var colNames []types.Identifier
-	var colTypes []types.ColumnType
-	var primary []types.ColumnKey
-	var fldNames []string
-	for idx := 0; idx < typ.NumField(); idx += 1 {
-		fld := typ.Field(idx)
-		tags := fieldTags(fld.Tag.Get("maho"))
-		if name, ok := tags["name"]; ok {
-			colNames = append(colNames, types.ID(name, true))
-		} else {
-			colNames = append(colNames, fieldNameToColumnName(fld.Name))
-		}
-		fldNames = append(fldNames, fld.Name)
-
-		size := uint32(1)
-		if val, ok := tags["size"]; ok {
-			n, err := strconv.Atoi(val)
-			if err != nil || n <= 0 {
-				panic(fmt.Sprintf("typed table: size not a positive integer: %s: %s", val, err))
-			}
-			size = uint32(n)
-		}
-
-		notNull := true
-		ftyp := fld.Type
-		if ftyp.Kind() == reflect.Pointer {
-			ftyp = ftyp.Elem()
-			if ftyp.Kind() == reflect.Slice {
-				panic("typed table: must not be pointer to a slice")
-			}
-
-			notNull = false
-		}
-
-		var vt types.ValueType
-		switch ftyp.Kind() {
-		case reflect.Bool:
-			vt = types.BoolType
-		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-			vt = types.Int64Type
-			size = uint32(ftyp.Size())
-		case reflect.Float32, reflect.Float64:
-			vt = types.Float64Type
-			size = 8
-		case reflect.Slice:
-			elem := ftyp.Elem()
-			if elem.Kind() != reflect.Uint8 || elem.Size() != 1 {
-				panic(fmt.Sprintf("typed table: must be a slice of bytes: %s", elem))
-			}
-			vt = types.BytesType
-		case reflect.String:
-			vt = types.StringType
-		default:
-			panic(fmt.Sprintf("typed table: bad field type: %s: %s", fld.Name, ftyp.Kind()))
-		}
-
-		_, ok := tags["notnull"]
-		if ftyp.Kind() == reflect.Slice {
-			notNull = ok
-		} else if ok {
-			panic(fmt.Sprintf("typed table: not null tag must be on a slice: %s", ftyp.Kind()))
-		}
-
-		ct := types.ColumnType{
-			Type:    vt,
-			Size:    size,
-			NotNull: notNull,
-		}
-		colTypes = append(colTypes, ct)
-
-		if _, ok := tags["primary"]; ok {
-			primary = append(primary, types.MakeColumnKey(types.ColumnNum(idx), false))
-		}
-	}
-
-	return &typedInfo{
-		typ:      typ,
-		tid:      tid,
-		tn:       tn,
-		colNames: colNames,
-		colTypes: colTypes,
-		primary:  primary,
-		fldNames: fldNames,
-	}
-}
-
-func (ti *typedInfo) toTableType() *TableType {
-	return &TableType{
-		Version:     1,
-		ColumnNames: ti.colNames,
-		ColumnTypes: ti.colTypes,
-		Key:         ti.primary,
-	}
-}
 
 func fieldToValue(ct types.ColumnType, fval reflect.Value) types.Value {
 	if !ct.NotNull {
@@ -233,7 +44,7 @@ func fieldToValue(ct types.ColumnType, fval reflect.Value) types.Value {
 	}
 }
 
-func (ti *typedInfo) structToRow(st interface{}) types.Row {
+func (ti *TypedInfo) structToRow(st interface{}) types.Row {
 	if st == nil {
 		return nil
 	}
@@ -257,7 +68,7 @@ func (ti *typedInfo) structToRow(st interface{}) types.Row {
 	return row
 }
 
-func (ti *typedInfo) rowToStruct(row types.Row, st interface{}) {
+func (ti *TypedInfo) rowToStruct(row types.Row, st interface{}) {
 	typ := reflect.TypeOf(st)
 	if typ.Kind() != reflect.Pointer {
 		panic(fmt.Sprintf("typed table: must be pointer to a struct; got %#v", st))
@@ -345,7 +156,7 @@ func fieldNameToColumn(fldNames []string, name string) int {
 	panic(fmt.Sprintf("typed table: field name not found: %s: %v", name, fldNames))
 }
 
-func (ti *typedInfo) structToColsVals(update interface{}) ([]types.ColumnNum, []types.Value) {
+func (ti *TypedInfo) structToColsVals(update interface{}) ([]types.ColumnNum, []types.Value) {
 	var cols []types.ColumnNum
 	var vals []types.Value
 
@@ -365,22 +176,22 @@ func (ti *typedInfo) structToColsVals(update interface{}) ([]types.ColumnNum, []
 	return cols, vals
 }
 
-type typedTable struct {
+type TypedTable struct {
 	tbl storage.Table
-	ti  *typedInfo
+	ti  *TypedInfo
 }
 
-type typedRows struct {
+type TypedRows struct {
 	rows storage.Rows
-	ti   *typedInfo
+	ti   *TypedInfo
 }
 
-type typedRowRef struct {
+type TypedRowRef struct {
 	rr storage.RowRef
-	ti *typedInfo
+	ti *TypedInfo
 }
 
-func openTypedTable(ctx context.Context, tx storage.Transaction, ti *typedInfo) (*typedTable,
+func OpenTypedTable(ctx context.Context, tx storage.Transaction, ti *TypedInfo) (*TypedTable,
 	error) {
 
 	tbl, err := tx.OpenTable(ctx, ti.tid, ti.tn, ti.colNames, ti.colTypes, ti.primary)
@@ -388,29 +199,29 @@ func openTypedTable(ctx context.Context, tx storage.Transaction, ti *typedInfo) 
 		return nil, err
 	}
 
-	return &typedTable{
+	return &TypedTable{
 		tbl: tbl,
 		ti:  ti,
 	}, nil
 }
 
-func createTypedTable(ctx context.Context, tx storage.Transaction, ti *typedInfo) error {
+func CreateTypedTable(ctx context.Context, tx storage.Transaction, ti *TypedInfo) error {
 	return tx.CreateTable(ctx, ti.tid, ti.tn, ti.colNames, ti.colTypes, ti.primary)
 }
 
-func (tt *typedTable) rows(ctx context.Context, minSt, maxSt interface{}) (*typedRows, error) {
+func (tt *TypedTable) Rows(ctx context.Context, minSt, maxSt interface{}) (*TypedRows, error) {
 	rows, err := tt.tbl.Rows(ctx, nil, tt.ti.structToRow(minSt), tt.ti.structToRow(maxSt), nil)
 	if err != nil {
 		return nil, err
 	}
 
-	return &typedRows{
+	return &TypedRows{
 		rows: rows,
 		ti:   tt.ti,
 	}, nil
 }
 
-func (tt *typedTable) insert(ctx context.Context, structs ...interface{}) error {
+func (tt *TypedTable) Insert(ctx context.Context, structs ...interface{}) error {
 	var rows []types.Row
 	for _, st := range structs {
 		rows = append(rows, tt.ti.structToRow(st))
@@ -419,19 +230,19 @@ func (tt *typedTable) insert(ctx context.Context, structs ...interface{}) error 
 	return tt.tbl.Insert(ctx, rows)
 }
 
-func (tt *typedTable) lookup(ctx context.Context, st interface{}) error {
-	tr, err := tt.rows(ctx, st, st)
+func (tt *TypedTable) Lookup(ctx context.Context, st interface{}) error {
+	tr, err := tt.Rows(ctx, st, st)
 	if err != nil {
 		return err
 	}
 	defer func() {
-		tr.close(ctx)
+		tr.Close(ctx)
 	}()
 
-	return tr.next(ctx, st)
+	return tr.Next(ctx, st)
 }
 
-func (tr *typedRows) next(ctx context.Context, st interface{}) error {
+func (tr *TypedRows) Next(ctx context.Context, st interface{}) error {
 	row, err := tr.rows.Next(ctx)
 	if err != nil {
 		return err
@@ -441,29 +252,29 @@ func (tr *typedRows) next(ctx context.Context, st interface{}) error {
 	return nil
 }
 
-func (tr *typedRows) current() (*typedRowRef, error) {
+func (tr *TypedRows) Current() (*TypedRowRef, error) {
 	rr, err := tr.rows.Current()
 	if err != nil {
 		return nil, err
 	}
 
-	return &typedRowRef{
+	return &TypedRowRef{
 		rr: rr,
 		ti: tr.ti,
 	}, nil
 }
 
-func (tr *typedRows) close(ctx context.Context) error {
+func (tr *TypedRows) Close(ctx context.Context) error {
 	err := tr.rows.Close(ctx)
 	tr.rows = nil
 	return err
 }
 
-func (trr *typedRowRef) update(ctx context.Context, update interface{}) error {
+func (trr *TypedRowRef) Update(ctx context.Context, update interface{}) error {
 	cols, vals := trr.ti.structToColsVals(update)
 	return trr.rr.Update(ctx, cols, vals)
 }
 
-func (trr *typedRowRef) delete(ctx context.Context) error {
+func (trr *TypedRowRef) Delete(ctx context.Context) error {
 	return trr.rr.Delete(ctx)
 }
