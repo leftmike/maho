@@ -201,11 +201,13 @@ func selectFunc(t *testing.T, what string, tbl storage.Table, cols []types.Colum
 			t.Errorf("%s(%d).Next() failed with %s", what, tbl.TID(), err)
 			break
 		}
+
 		rowRef, err := rs.Current()
 		if err != nil {
 			t.Errorf("%s(%d).Current() failed with %s", what, tbl.TID(), err)
 			break
 		}
+
 		fn(rowRef, row)
 	}
 

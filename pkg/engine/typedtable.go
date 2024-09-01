@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"fmt"
+	"io"
 	"reflect"
 	"slices"
 
@@ -209,6 +210,10 @@ func CreateTypedTable(ctx context.Context, tx storage.Transaction, ti *TypedInfo
 	return tx.CreateTable(ctx, ti.tid, ti.tn, ti.colNames, ti.colTypes, ti.primary)
 }
 
+func (tt *TypedTable) TypedInfo() *TypedInfo {
+	return tt.ti
+}
+
 func (tt *TypedTable) Rows(ctx context.Context, minSt, maxSt interface{}) (*TypedRows, error) {
 	rows, err := tt.tbl.Rows(ctx, nil, tt.ti.structToRow(minSt), tt.ti.structToRow(maxSt), nil)
 	if err != nil {
@@ -239,7 +244,18 @@ func (tt *TypedTable) Lookup(ctx context.Context, st interface{}) error {
 		tr.Close(ctx)
 	}()
 
-	return tr.Next(ctx, st)
+	err = tr.Next(ctx, st)
+	if err != nil {
+		return err
+	}
+
+	_, err = tr.rows.Next(ctx)
+	if err == nil {
+		panic("typed table: lookup returned more than one row")
+	} else if err != io.EOF {
+		return err
+	}
+	return nil
 }
 
 func (tr *TypedRows) Next(ctx context.Context, st interface{}) error {
