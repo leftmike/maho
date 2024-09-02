@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/gob"
+	"errors"
 	"fmt"
+	"io"
 
 	"github.com/leftmike/maho/pkg/parser/sql"
 	"github.com/leftmike/maho/pkg/storage"
@@ -56,11 +58,17 @@ type IndexType struct {
 	Key  []types.ColumnKey
 }
 
+var (
+	errTransactionComplete = errors.New("engine: transaction already completed")
+)
+
 type engine struct {
 	store storage.Store
 }
 
-type transaction struct{}
+type transaction struct {
+	tx storage.Transaction
+}
 
 const (
 	sequencesTableId storage.TableId = iota + storage.EngineTableId
@@ -116,15 +124,8 @@ func (eng *engine) CreateDatabase(dn types.Identifier, opts storage.OptionsMap) 
 	}
 
 	tx := eng.store.Begin()
-
 	ctx := context.Background()
-	tt, err := OpenTypedTable(ctx, tx, databasesTypedInfo)
-	if err != nil {
-		tx.Rollback()
-		return err
-	}
-
-	err = tt.Insert(ctx,
+	err := TypedTableInsert(ctx, tx, databasesTypedInfo,
 		&databasesRow{
 			Database: dn.String(),
 		})
@@ -142,20 +143,40 @@ func (eng *engine) DropDatabase(dn types.Identifier, ifExists bool) error {
 }
 
 func (eng *engine) Begin() Transaction {
-	return &transaction{}
+	return &transaction{
+		tx: eng.store.Begin(),
+	}
 }
 
 func (tx *transaction) Commit(ctx context.Context) error {
-	// XXX
-	return nil
+	if tx.tx == nil {
+		return errTransactionComplete
+	}
+	err := tx.tx.Commit(ctx)
+	tx.tx = nil
+	return err
 }
 
 func (tx *transaction) Rollback() error {
-	// XXX
-	return nil
+	if tx.tx == nil {
+		return errTransactionComplete
+	}
+	err := tx.tx.Rollback()
+	tx.tx = nil
+	return err
 }
 
 func (tx *transaction) CreateSchema(ctx context.Context, sn types.SchemaName) error {
+	dr := databasesRow{
+		Database: sn.Database.String(),
+	}
+	err := TypedTableLookup(ctx, tx.tx, databasesTypedInfo, &dr)
+	if err == io.EOF {
+		return fmt.Errorf("engine: database not found: %s", sn.Database)
+	} else if err != nil {
+		return err
+	}
+
 	// XXX
 	return nil
 }

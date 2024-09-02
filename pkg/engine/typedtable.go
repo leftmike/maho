@@ -69,7 +69,7 @@ func (ti *TypedInfo) structToRow(st interface{}) types.Row {
 	return row
 }
 
-func (ti *TypedInfo) rowToStruct(row types.Row, st interface{}) {
+func (ti *TypedInfo) RowToStruct(row types.Row, st interface{}) {
 	typ := reflect.TypeOf(st)
 	if typ.Kind() != reflect.Pointer {
 		panic(fmt.Sprintf("typed table: must be pointer to a struct; got %#v", st))
@@ -177,120 +177,132 @@ func (ti *TypedInfo) structToColsVals(update interface{}) ([]types.ColumnNum, []
 	return cols, vals
 }
 
-type TypedTable struct {
-	tbl storage.Table
-	ti  *TypedInfo
-}
-
-type TypedRows struct {
-	rows storage.Rows
-	ti   *TypedInfo
-}
-
-type TypedRowRef struct {
-	rr storage.RowRef
-	ti *TypedInfo
-}
-
-func OpenTypedTable(ctx context.Context, tx storage.Transaction, ti *TypedInfo) (*TypedTable,
-	error) {
-
-	tbl, err := tx.OpenTable(ctx, ti.tid, ti.tn, ti.colNames, ti.colTypes, ti.primary)
-	if err != nil {
-		return nil, err
-	}
-
-	return &TypedTable{
-		tbl: tbl,
-		ti:  ti,
-	}, nil
-}
-
 func CreateTypedTable(ctx context.Context, tx storage.Transaction, ti *TypedInfo) error {
 	return tx.CreateTable(ctx, ti.tid, ti.tn, ti.colNames, ti.colTypes, ti.primary)
 }
 
-func (tt *TypedTable) TypedInfo() *TypedInfo {
-	return tt.ti
-}
+func TypedTableInsert(ctx context.Context, tx storage.Transaction, ti *TypedInfo,
+	structs ...interface{}) error {
 
-func (tt *TypedTable) Rows(ctx context.Context, minSt, maxSt interface{}) (*TypedRows, error) {
-	rows, err := tt.tbl.Rows(ctx, nil, tt.ti.structToRow(minSt), tt.ti.structToRow(maxSt), nil)
+	tbl, err := tx.OpenTable(ctx, ti.tid, ti.tn, ti.colNames, ti.colTypes, ti.primary)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	return &TypedRows{
-		rows: rows,
-		ti:   tt.ti,
-	}, nil
-}
-
-func (tt *TypedTable) Insert(ctx context.Context, structs ...interface{}) error {
 	var rows []types.Row
 	for _, st := range structs {
-		rows = append(rows, tt.ti.structToRow(st))
+		rows = append(rows, ti.structToRow(st))
 	}
 
-	return tt.tbl.Insert(ctx, rows)
+	return tbl.Insert(ctx, rows)
 }
 
-func (tt *TypedTable) Lookup(ctx context.Context, st interface{}) error {
-	tr, err := tt.Rows(ctx, st, st)
+func typedTableSelect(ctx context.Context, tx storage.Transaction, ti *TypedInfo,
+	minSt, maxSt interface{}, fn func(rows storage.Rows, row types.Row) error) error {
+
+	tbl, err := tx.OpenTable(ctx, ti.tid, ti.tn, ti.colNames, ti.colTypes, ti.primary)
+	if err != nil {
+		return err
+	}
+	rows, err := tbl.Rows(ctx, nil, ti.structToRow(minSt), ti.structToRow(maxSt), nil)
 	if err != nil {
 		return err
 	}
 	defer func() {
-		tr.Close(ctx)
+		rows.Close(ctx)
 	}()
 
-	err = tr.Next(ctx, st)
-	if err != nil {
-		return err
+	for {
+		row, err := rows.Next(ctx)
+		if err == io.EOF {
+			break
+		} else if err != nil {
+			return err
+		}
+
+		err = fn(rows, row)
+		if err == io.EOF {
+			break
+		} else if err != nil {
+			return err
+		}
 	}
 
-	_, err = tr.rows.Next(ctx)
-	if err == nil {
-		panic("typed table: lookup returned more than one row")
-	} else if err != io.EOF {
+	return nil
+}
+
+func TypedTableLookup(ctx context.Context, tx storage.Transaction, ti *TypedInfo,
+	st interface{}) error {
+
+	var found bool
+	err := typedTableSelect(ctx, tx, ti, st, st,
+		func(rows storage.Rows, row types.Row) error {
+			if found {
+				panic("typed table: lookup returned more than one row")
+			}
+			found = true
+
+			ti.RowToStruct(row, st)
+			return nil
+		})
+	if err != nil {
 		return err
+	} else if !found {
+		return io.EOF
 	}
 	return nil
 }
 
-func (tr *TypedRows) Next(ctx context.Context, st interface{}) error {
-	row, err := tr.rows.Next(ctx)
-	if err != nil {
-		return err
-	}
+func TypedTableSelect(ctx context.Context, tx storage.Transaction, ti *TypedInfo,
+	minSt, maxSt interface{}, fn func(row types.Row) error) error {
 
-	tr.ti.rowToStruct(row, st)
-	return nil
+	return typedTableSelect(ctx, tx, ti, minSt, maxSt,
+		func(rows storage.Rows, row types.Row) error {
+			return fn(row)
+		})
 }
 
-func (tr *TypedRows) Current() (*TypedRowRef, error) {
-	rr, err := tr.rows.Current()
-	if err != nil {
-		return nil, err
-	}
+func TypedTableUpdate(ctx context.Context, tx storage.Transaction, ti *TypedInfo,
+	minSt, maxSt interface{}, fn func(row types.Row) (interface{}, error)) error {
 
-	return &TypedRowRef{
-		rr: rr,
-		ti: tr.ti,
-	}, nil
+	return typedTableSelect(ctx, tx, ti, minSt, maxSt,
+		func(rows storage.Rows, row types.Row) error {
+			update, err := fn(row)
+			if err != nil {
+				return err
+			}
+
+			if update != nil {
+				rr, err := rows.Current()
+				if err != nil {
+					return err
+				}
+
+				cols, vals := ti.structToColsVals(update)
+				return rr.Update(ctx, cols, vals)
+			}
+			return nil
+		})
 }
 
-func (tr *TypedRows) Close(ctx context.Context) error {
-	err := tr.rows.Close(ctx)
-	tr.rows = nil
-	return err
-}
+func TypedTableDelete(ctx context.Context, tx storage.Transaction, ti *TypedInfo,
+	minSt, maxSt interface{}, fn func(row types.Row) (bool, error)) error {
 
-func (trr *TypedRowRef) Update(ctx context.Context, update interface{}) error {
-	cols, vals := trr.ti.structToColsVals(update)
-	return trr.rr.Update(ctx, cols, vals)
-}
+	return typedTableSelect(ctx, tx, ti, minSt, maxSt,
+		func(rows storage.Rows, row types.Row) error {
+			delete, err := fn(row)
+			if err != nil {
+				return err
+			}
 
-func (trr *TypedRowRef) Delete(ctx context.Context) error {
-	return trr.rr.Delete(ctx)
+			if delete {
+				rr, err := rows.Current()
+				if err != nil {
+					return err
+				}
+
+				return rr.Delete(ctx)
+			}
+			return nil
+		})
 }

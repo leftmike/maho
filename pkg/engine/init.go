@@ -62,26 +62,20 @@ func initStore(ctx context.Context, tx storage.Transaction) error {
 			continue
 		}
 
-		tt, err := OpenTypedTable(ctx, tx, it.ti)
-		if err != nil {
-			return err
-		}
-		err = tt.Insert(ctx, it.structs...)
+		err = TypedTableInsert(ctx, tx, it.ti, it.structs...)
 		if err != nil {
 			return err
 		}
 	}
 
-	tt, err := OpenTypedTable(ctx, tx, tablesTypedInfo)
-	if err != nil {
-		return err
-	}
+	var structs []interface{}
 	for _, it := range initTables {
 		buf, err := it.ti.TableType().Encode()
 		if err != nil {
 			return err
 		}
-		err = tt.Insert(ctx,
+
+		structs = append(structs,
 			&tablesRow{
 				Database: it.ti.tn.Database.String(),
 				Schema:   it.ti.tn.Schema.String(),
@@ -89,12 +83,9 @@ func initStore(ctx context.Context, tx storage.Transaction) error {
 				TableId:  int64(it.ti.tid),
 				Type:     buf,
 			})
-		if err != nil {
-			return err
-		}
 	}
 
-	return nil
+	return TypedTableInsert(ctx, tx, tablesTypedInfo, structs...)
 }
 
 func Init(store storage.Store) error {

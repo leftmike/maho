@@ -3,7 +3,6 @@ package engine_test
 import (
 	"context"
 	"fmt"
-	"io"
 	"reflect"
 	"strconv"
 	"testing"
@@ -55,48 +54,61 @@ func TestTypedTable(t *testing.T) {
 	testTypedTables(t, store.Begin(),
 		[]interface{}{
 			createTypedTable{ti: ti},
-			openTypedTable{ti: ti},
-			insertTypedTable{rows: rows},
+			typedTableInsert{
+				ti:   ti,
+				rows: rows,
+			},
 			commit{},
 		})
 
 	testTypedTables(t, store.Begin(),
 		[]interface{}{
-			openTypedTable{ti: ti},
-			selectTypedTable{rows: rows},
-			selectTypedTable{
+			typedTableSelect{
+				ti:   ti,
+				rows: rows,
+			},
+			typedTableSelect{
+				ti:    ti,
 				minSt: &typedRow{C0: 1},
 				rows:  rows[1:],
 			},
-			selectTypedTable{
+			typedTableSelect{
+				ti:    ti,
 				maxSt: &typedRow{C0: 1},
 				rows:  rows[:2],
 			},
-			selectTypedTable{
+			typedTableSelect{
+				ti:    ti,
 				minSt: &typedRow{C0: 1},
 				maxSt: &typedRow{C0: 2},
 				rows:  rows[1:3],
 			},
-			selectTypedTable{
+			typedTableSelect{
+				ti:    ti,
 				minSt: &typedRow{C0: 4},
 			},
-			lookupTypedTable{
+			typedTableLookup{
+				ti:   ti,
 				st:   typedRow{C0: 3},
 				want: rows[3],
 			},
-			lookupTypedTable{
+			typedTableLookup{
+				ti:   ti,
 				st:   typedRow{C0: 0},
 				want: rows[0],
 			},
-			lookupTypedTable{
+			typedTableLookup{
+				ti:   ti,
 				st:   typedRow{C0: 2},
 				want: rows[2],
 			},
-			lookupTypedTable{
+			typedTableLookup{
+				ti:   ti,
 				st:   typedRow{C0: 1},
 				want: rows[1],
 			},
-			lookupTypedTable{
+			typedTableLookup{
+				ti:   ti,
 				st:   typedRow{C0: 4},
 				fail: true,
 			},
@@ -105,8 +117,8 @@ func TestTypedTable(t *testing.T) {
 
 	testTypedTables(t, store.Begin(),
 		[]interface{}{
-			openTypedTable{ti: ti},
-			insertTypedTable{
+			typedTableInsert{
+				ti:   ti,
 				rows: []typedRow{{C0: 0}},
 				fail: true,
 			},
@@ -121,8 +133,8 @@ func TestTypedUpdate(t *testing.T) {
 	testTypedTables(t, store.Begin(),
 		[]interface{}{
 			createTypedTable{ti: ti},
-			openTypedTable{ti: ti},
-			insertTypedTable{
+			typedTableInsert{
+				ti: ti,
 				rows: []typedRow{
 					{C0: 0},
 					{C0: 1},
@@ -137,9 +149,9 @@ func TestTypedUpdate(t *testing.T) {
 
 	testTypedTables(t, store.Begin(),
 		[]interface{}{
-			openTypedTable{ti: ti},
-			updateTypedTable{
-				update: func(st typedRow) interface{} {
+			typedTableUpdate{
+				ti: ti,
+				update: func(st typedRow) (interface{}, error) {
 					if st.C0%2 == 0 {
 						return &struct {
 							C1 bool
@@ -149,7 +161,7 @@ func TestTypedUpdate(t *testing.T) {
 							C1: true,
 							C2: strconv.Itoa(st.C0),
 							C4: float64(st.C0 * 10),
-						}
+						}, nil
 					}
 
 					return &struct {
@@ -158,7 +170,7 @@ func TestTypedUpdate(t *testing.T) {
 					}{
 						C3: []byte{byte(st.C0), byte(st.C0), byte(st.C0)},
 						C5: intp(int64(st.C0 * 10)),
-					}
+					}, nil
 				},
 			},
 			commit{},
@@ -166,8 +178,8 @@ func TestTypedUpdate(t *testing.T) {
 
 	testTypedTables(t, store.Begin(),
 		[]interface{}{
-			openTypedTable{ti: ti},
-			selectTypedTable{
+			typedTableSelect{
+				ti: ti,
 				rows: []typedRow{
 					{C0: 0, C1: true, C2: "0", C4: 0},
 					{C0: 1, C3: []byte{1, 1, 1}, C5: intp(10)},
@@ -188,8 +200,8 @@ func TestTypedDelete(t *testing.T) {
 	testTypedTables(t, store.Begin(),
 		[]interface{}{
 			createTypedTable{ti: ti},
-			openTypedTable{ti: ti},
-			insertTypedTable{
+			typedTableInsert{
+				ti: ti,
 				rows: []typedRow{
 					{C0: 0},
 					{C0: 1},
@@ -208,8 +220,8 @@ func TestTypedDelete(t *testing.T) {
 
 	testTypedTables(t, store.Begin(),
 		[]interface{}{
-			openTypedTable{ti: ti},
-			deleteTypedTable{
+			typedTableDelete{
+				ti:    ti,
 				minSt: &typedRow{C0: 7},
 			},
 			commit{},
@@ -217,8 +229,8 @@ func TestTypedDelete(t *testing.T) {
 
 	testTypedTables(t, store.Begin(),
 		[]interface{}{
-			openTypedTable{ti: ti},
-			selectTypedTable{
+			typedTableSelect{
+				ti: ti,
 				rows: []typedRow{
 					{C0: 0},
 					{C0: 1},
@@ -234,8 +246,8 @@ func TestTypedDelete(t *testing.T) {
 
 	testTypedTables(t, store.Begin(),
 		[]interface{}{
-			openTypedTable{ti: ti},
-			deleteTypedTable{
+			typedTableDelete{
+				ti:    ti,
 				minSt: &typedRow{C0: 2},
 				maxSt: &typedRow{C0: 5},
 			},
@@ -244,8 +256,8 @@ func TestTypedDelete(t *testing.T) {
 
 	testTypedTables(t, store.Begin(),
 		[]interface{}{
-			openTypedTable{ti: ti},
-			selectTypedTable{
+			typedTableSelect{
+				ti: ti,
 				rows: []typedRow{
 					{C0: 0},
 					{C0: 1},
@@ -254,11 +266,6 @@ func TestTypedDelete(t *testing.T) {
 			},
 			commit{},
 		})
-}
-
-type openTypedTable struct {
-	ti   *engine.TypedInfo
-	fail bool
 }
 
 type createTypedTable struct {
@@ -275,30 +282,35 @@ type typedRow struct {
 	C5 *int64
 }
 
-type insertTypedTable struct {
+type typedTableInsert struct {
+	ti   *engine.TypedInfo
 	rows []typedRow
 	fail bool
 }
 
-type lookupTypedTable struct {
+type typedTableLookup struct {
+	ti   *engine.TypedInfo
 	st   typedRow
 	want typedRow
 	fail bool
 }
 
-type selectTypedTable struct {
+type typedTableSelect struct {
+	ti    *engine.TypedInfo
 	minSt interface{}
 	maxSt interface{}
 	rows  []typedRow
 }
 
-type updateTypedTable struct {
+type typedTableUpdate struct {
+	ti     *engine.TypedInfo
 	minSt  interface{}
 	maxSt  interface{}
-	update func(st typedRow) interface{}
+	update func(row typedRow) (interface{}, error)
 }
 
-type deleteTypedTable struct {
+type typedTableDelete struct {
+	ti    *engine.TypedInfo
 	minSt interface{}
 	maxSt interface{}
 }
@@ -306,67 +318,14 @@ type deleteTypedTable struct {
 type commit struct{}
 type rollback struct{}
 
-func selectFunc(t *testing.T, what string, tt *engine.TypedTable, minSt, maxSt interface{},
-	fn func(trr *engine.TypedRowRef, st typedRow)) {
-
-	t.Helper()
-
-	ctx := context.Background()
-	tr, err := tt.Rows(ctx, minSt, maxSt)
-	if err != nil {
-		t.Errorf("%s(%s, %d).Rows() failed with %s", what, tt.TypedInfo().TableName(),
-			tt.TypedInfo().TableId(), err)
-		return
-	}
-
-	for {
-		var st typedRow
-		err = tr.Next(ctx, &st)
-		if err == io.EOF {
-			break
-		} else if err != nil {
-			t.Errorf("%s(%s, %d).Next() failed with %s", what, tt.TypedInfo().TableName(),
-				tt.TypedInfo().TableId(), err)
-			break
-		}
-
-		trr, err := tr.Current()
-		if err != nil {
-			t.Errorf("%s(%s, %d).Current() failed with %s", what, tt.TypedInfo().TableName(),
-				tt.TypedInfo().TableId(), err)
-			break
-		}
-
-		fn(trr, st)
-	}
-
-	err = tr.Close(ctx)
-	if err != nil {
-		t.Errorf("%s(%s, %d).Close() failed with %s", what, tt.TypedInfo().TableName(),
-			tt.TypedInfo().TableId(), err)
-	}
-}
-
 func testTypedTables(t *testing.T, tx storage.Transaction, cases []interface{}) {
 	t.Helper()
 
 	ctx := context.Background()
 
-	var tt *engine.TypedTable
 	var err error
 	for _, c := range cases {
 		switch c := c.(type) {
-		case openTypedTable:
-			tt, err = engine.OpenTypedTable(ctx, tx, c.ti)
-			if c.fail {
-				if err == nil {
-					t.Errorf("OpenTypedTable(%s, %d) did not fail", c.ti.TableName(),
-						c.ti.TableId())
-				}
-			} else if err != nil {
-				t.Errorf("OpenTypedTable(%s, %d) failed with %s", c.ti.TableName(),
-					c.ti.TableId(), err)
-			}
 		case createTypedTable:
 			err = engine.CreateTypedTable(ctx, tx, c.ti)
 			if c.fail {
@@ -378,63 +337,64 @@ func testTypedTables(t *testing.T, tx storage.Transaction, cases []interface{}) 
 				t.Errorf("CreateTypedTable(%s, %d) failed with %s", c.ti.TableName(),
 					c.ti.TableId(), err)
 			}
-		case insertTypedTable:
+		case typedTableInsert:
 			for _, r := range c.rows {
-				err = tt.Insert(ctx, &r)
+				err = engine.TypedTableInsert(ctx, tx, c.ti, &r)
 				if c.fail {
 					if err == nil {
-						t.Errorf("Insert(%s, %d) did not fail", tt.TypedInfo().TableName(),
-							tt.TypedInfo().TableId())
+						t.Errorf("Insert(%s, %d) did not fail", c.ti.TableName(), c.ti.TableId())
 					}
 				} else if err != nil {
-					t.Errorf("Insert(%s, %d) failed with %s", tt.TypedInfo().TableName(),
-						tt.TypedInfo().TableId(), err)
+					t.Errorf("Insert(%s, %d) failed with %s", c.ti.TableName(), c.ti.TableId(),
+						err)
 				}
 			}
-		case lookupTypedTable:
+		case typedTableLookup:
 			st := c.st
-			err = tt.Lookup(ctx, &st)
+			err = engine.TypedTableLookup(ctx, tx, c.ti, &st)
 			if c.fail {
 				if err == nil {
-					t.Errorf("Lookup(%s, %d) did not fail", tt.TypedInfo().TableName(),
-						tt.TypedInfo().TableId())
+					t.Errorf("Lookup(%s, %d) did not fail", c.ti.TableName(), c.ti.TableId())
 				}
 			} else if err != nil {
-				t.Errorf("Lookup(%s, %d) failed with %s", tt.TypedInfo().TableName(),
-					tt.TypedInfo().TableId(), err)
+				t.Errorf("Lookup(%s, %d) failed with %s", c.ti.TableName(), c.ti.TableId(), err)
 			} else if !reflect.DeepEqual(st, c.want) {
-				t.Errorf("Lookup(%s, %d) got %#v want %#v", tt.TypedInfo().TableName(),
-					tt.TypedInfo().TableId(), st, c.want)
+				t.Errorf("Lookup(%s, %d) got %#v want %#v", c.ti.TableName(), c.ti.TableId(), st,
+					c.want)
 			}
-		case selectTypedTable:
+		case typedTableSelect:
 			var rows []typedRow
-			selectFunc(t, "Select", tt, c.minSt, c.maxSt,
-				func(trr *engine.TypedRowRef, st typedRow) {
+			err = engine.TypedTableSelect(ctx, tx, c.ti, c.minSt, c.maxSt,
+				func(row types.Row) error {
+					var st typedRow
+					c.ti.RowToStruct(row, &st)
 					rows = append(rows, st)
+					return nil
 				})
-			if !reflect.DeepEqual(rows, c.rows) {
-				t.Errorf("Select(%s, %d) got %#v want %#v", tt.TypedInfo().TableName(),
-					tt.TypedInfo().TableId(), rows, c.rows)
+			if err != nil {
+				t.Errorf("Select(%s, %d) failed with %s", c.ti.TableName(), c.ti.TableId(), err)
+			} else if !reflect.DeepEqual(rows, c.rows) {
+				t.Errorf("Select(%s, %d) got %#v want %#v", c.ti.TableName(), c.ti.TableId(),
+					rows, c.rows)
 			}
-		case updateTypedTable:
-			selectFunc(t, "Update", tt, c.minSt, c.maxSt,
-				func(trr *engine.TypedRowRef, st typedRow) {
-					err := trr.Update(ctx, c.update(st))
-					if err != nil {
-						t.Errorf("Update(%s, %d) failed with %s", tt.TypedInfo().TableName(),
-							tt.TypedInfo().TableId(), err)
-					}
-
+		case typedTableUpdate:
+			err = engine.TypedTableUpdate(ctx, tx, c.ti, c.minSt, c.maxSt,
+				func(row types.Row) (interface{}, error) {
+					var st typedRow
+					c.ti.RowToStruct(row, &st)
+					return c.update(st)
 				})
-		case deleteTypedTable:
-			selectFunc(t, "Delete", tt, c.minSt, c.maxSt,
-				func(trr *engine.TypedRowRef, st typedRow) {
-					err := trr.Delete(ctx)
-					if err != nil {
-						t.Errorf("Delete(%s, %d) failed with %s", tt.TypedInfo().TableName(),
-							tt.TypedInfo().TableId(), err)
-					}
+			if err != nil {
+				t.Errorf("Update(%s, %d) failed with %s", c.ti.TableName(), c.ti.TableId(), err)
+			}
+		case typedTableDelete:
+			err = engine.TypedTableDelete(ctx, tx, c.ti, c.minSt, c.maxSt,
+				func(row types.Row) (bool, error) {
+					return true, nil
 				})
+			if err != nil {
+				t.Errorf("Delete(%s, %d) failed with %s", c.ti.TableName(), c.ti.TableId(), err)
+			}
 		case commit:
 			err = tx.Commit(ctx)
 			if err != nil {
