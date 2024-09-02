@@ -142,6 +142,8 @@ func (eng *engine) DropDatabase(dn types.Identifier, ifExists bool) error {
 	return nil
 }
 
+// XXX: ListDatabases
+
 func (eng *engine) Begin() Transaction {
 	return &transaction{
 		tx: eng.store.Begin(),
@@ -167,17 +169,25 @@ func (tx *transaction) Rollback() error {
 }
 
 func (tx *transaction) CreateSchema(ctx context.Context, sn types.SchemaName) error {
-	dr := databasesRow{
-		Database: sn.Database.String(),
-	}
-	err := TypedTableLookup(ctx, tx.tx, databasesTypedInfo, &dr)
+	err := TypedTableLookup(ctx, tx.tx, databasesTypedInfo,
+		&databasesRow{
+			Database: sn.Database.String(),
+		})
 	if err == io.EOF {
 		return fmt.Errorf("engine: database not found: %s", sn.Database)
 	} else if err != nil {
 		return err
 	}
 
-	// XXX
+	err = TypedTableInsert(ctx, tx.tx, schemasTypedInfo,
+		&schemasRow{
+			Database: sn.Database.String(),
+			Schema:   sn.Schema.String(),
+		})
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -189,8 +199,35 @@ func (tx *transaction) DropSchema(ctx context.Context, sn types.SchemaName, ifEx
 func (tx *transaction) ListSchemas(ctx context.Context, dn types.Identifier) ([]types.Identifier,
 	error) {
 
-	// XXX
-	return nil, nil
+	err := TypedTableLookup(ctx, tx.tx, databasesTypedInfo,
+		&databasesRow{
+			Database: dn.String(),
+		})
+	if err == io.EOF {
+		return nil, fmt.Errorf("engine: database not found: %s", dn)
+	} else if err != nil {
+		return nil, err
+	}
+
+	var schemas []types.Identifier
+	err = TypedTableSelect(ctx, tx.tx, schemasTypedInfo,
+		&schemasRow{
+			Database: dn.String(),
+		}, nil, func(row types.Row) error {
+			var sr schemasRow
+			schemasTypedInfo.RowToStruct(row, &sr)
+
+			if sr.Database != dn.String() {
+				return io.EOF
+			}
+
+			schemas = append(schemas, types.ID(sr.Schema, true))
+			return nil
+		})
+	if err != nil {
+		return nil, err
+	}
+	return schemas, nil
 }
 
 func (tx *transaction) OpenTable(ctx context.Context, tn types.TableName) (Table, error) {

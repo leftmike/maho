@@ -28,7 +28,7 @@ var (
 					Database: types.SYSTEM.String(),
 				},
 				&databasesRow{
-					Database: "maho",
+					Database: types.MAHO.String(),
 				},
 			},
 		},
@@ -40,7 +40,7 @@ var (
 					Schema:   types.INFO.String(),
 				},
 				&schemasRow{
-					Database: "maho",
+					Database: types.MAHO.String(),
 					Schema:   types.PUBLIC.String(),
 				},
 			},

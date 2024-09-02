@@ -323,11 +323,10 @@ func testTypedTables(t *testing.T, tx storage.Transaction, cases []interface{}) 
 
 	ctx := context.Background()
 
-	var err error
 	for _, c := range cases {
 		switch c := c.(type) {
 		case createTypedTable:
-			err = engine.CreateTypedTable(ctx, tx, c.ti)
+			err := engine.CreateTypedTable(ctx, tx, c.ti)
 			if c.fail {
 				if err == nil {
 					t.Errorf("CreateTypedTable(%s, %d) did not fail", c.ti.TableName(),
@@ -339,7 +338,7 @@ func testTypedTables(t *testing.T, tx storage.Transaction, cases []interface{}) 
 			}
 		case typedTableInsert:
 			for _, r := range c.rows {
-				err = engine.TypedTableInsert(ctx, tx, c.ti, &r)
+				err := engine.TypedTableInsert(ctx, tx, c.ti, &r)
 				if c.fail {
 					if err == nil {
 						t.Errorf("Insert(%s, %d) did not fail", c.ti.TableName(), c.ti.TableId())
@@ -351,7 +350,7 @@ func testTypedTables(t *testing.T, tx storage.Transaction, cases []interface{}) 
 			}
 		case typedTableLookup:
 			st := c.st
-			err = engine.TypedTableLookup(ctx, tx, c.ti, &st)
+			err := engine.TypedTableLookup(ctx, tx, c.ti, &st)
 			if c.fail {
 				if err == nil {
 					t.Errorf("Lookup(%s, %d) did not fail", c.ti.TableName(), c.ti.TableId())
@@ -364,7 +363,7 @@ func testTypedTables(t *testing.T, tx storage.Transaction, cases []interface{}) 
 			}
 		case typedTableSelect:
 			var rows []typedRow
-			err = engine.TypedTableSelect(ctx, tx, c.ti, c.minSt, c.maxSt,
+			err := engine.TypedTableSelect(ctx, tx, c.ti, c.minSt, c.maxSt,
 				func(row types.Row) error {
 					var st typedRow
 					c.ti.RowToStruct(row, &st)
@@ -378,7 +377,7 @@ func testTypedTables(t *testing.T, tx storage.Transaction, cases []interface{}) 
 					rows, c.rows)
 			}
 		case typedTableUpdate:
-			err = engine.TypedTableUpdate(ctx, tx, c.ti, c.minSt, c.maxSt,
+			err := engine.TypedTableUpdate(ctx, tx, c.ti, c.minSt, c.maxSt,
 				func(row types.Row) (interface{}, error) {
 					var st typedRow
 					c.ti.RowToStruct(row, &st)
@@ -388,7 +387,7 @@ func testTypedTables(t *testing.T, tx storage.Transaction, cases []interface{}) 
 				t.Errorf("Update(%s, %d) failed with %s", c.ti.TableName(), c.ti.TableId(), err)
 			}
 		case typedTableDelete:
-			err = engine.TypedTableDelete(ctx, tx, c.ti, c.minSt, c.maxSt,
+			err := engine.TypedTableDelete(ctx, tx, c.ti, c.minSt, c.maxSt,
 				func(row types.Row) (bool, error) {
 					return true, nil
 				})
@@ -396,12 +395,12 @@ func testTypedTables(t *testing.T, tx storage.Transaction, cases []interface{}) 
 				t.Errorf("Delete(%s, %d) failed with %s", c.ti.TableName(), c.ti.TableId(), err)
 			}
 		case commit:
-			err = tx.Commit(ctx)
+			err := tx.Commit(ctx)
 			if err != nil {
 				t.Fatalf("Commit() failed with %s", err)
 			}
 		case rollback:
-			err = tx.Rollback()
+			err := tx.Rollback()
 			if err != nil {
 				t.Fatalf("Rollback() failed with %s", err)
 			}

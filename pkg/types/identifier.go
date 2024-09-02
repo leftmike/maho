@@ -41,6 +41,7 @@ const (
 	INT4
 	INT8
 	INTEGER
+	MAHO
 	METADATA
 	PATH
 	PRIMARY_QUOTED
@@ -155,6 +156,7 @@ var (
 		"flags":       FLAGS,
 		"indexes":     INDEXES,
 		"info":        INFO,
+		"maho":        MAHO,
 		"metadata":    METADATA,
 		"primary":     PRIMARY_QUOTED,
 		"private":     PRIVATE,
