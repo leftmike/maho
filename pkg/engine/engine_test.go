@@ -85,6 +85,10 @@ type dropDatabase struct {
 	fail     bool
 }
 
+type listDatabases struct {
+	databases []types.Identifier
+}
+
 func TestDatabase(t *testing.T) {
 	cases := []interface{}{
 		createDatabase{
@@ -93,6 +97,24 @@ func TestDatabase(t *testing.T) {
 		createDatabase{
 			dn:   types.ID("db", false),
 			fail: true,
+		},
+		listDatabases{
+			databases: []types.Identifier{
+				types.SYSTEM,
+				types.MAHO,
+				types.ID("db", false),
+			},
+		},
+		createDatabase{
+			dn: types.ID("db2", false),
+		},
+		listDatabases{
+			databases: []types.Identifier{
+				types.SYSTEM,
+				types.MAHO,
+				types.ID("db", false),
+				types.ID("db2", false),
+			},
 		},
 	}
 
@@ -110,6 +132,19 @@ func TestDatabase(t *testing.T) {
 			}
 		case dropDatabase:
 			// XXX
+		case listDatabases:
+			databases, err := eng.ListDatabases()
+			if err != nil {
+				t.Errorf("ListDatabases() failed with %s", err)
+			} else {
+				slices.Sort(databases)
+				slices.Sort(c.databases)
+				if !reflect.DeepEqual(databases, c.databases) {
+					t.Errorf("ListDatabases() got %v want %v", databases, c.databases)
+				}
+			}
+		default:
+			panic(fmt.Sprintf("unexpected case: %T %#v", c, c))
 		}
 	}
 }

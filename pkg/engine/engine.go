@@ -16,6 +16,7 @@ import (
 type Engine interface {
 	CreateDatabase(dn types.Identifier, opts storage.OptionsMap) error
 	DropDatabase(dn types.Identifier, ifExists bool) error
+	ListDatabases() ([]types.Identifier, error)
 	Begin() Transaction
 }
 
@@ -142,7 +143,29 @@ func (eng *engine) DropDatabase(dn types.Identifier, ifExists bool) error {
 	return nil
 }
 
-// XXX: ListDatabases
+func (eng *engine) ListDatabases() ([]types.Identifier, error) {
+	tx := eng.store.Begin()
+	ctx := context.Background()
+
+	var databases []types.Identifier
+	err := TypedTableSelect(ctx, tx, databasesTypedInfo, nil, nil,
+		func(row types.Row) error {
+			var dr databasesRow
+			databasesTypedInfo.RowToStruct(row, &dr)
+
+			databases = append(databases, types.ID(dr.Database, true))
+			return nil
+		})
+	if err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+	err = tx.Commit(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return databases, nil
+}
 
 func (eng *engine) Begin() Transaction {
 	return &transaction{

@@ -246,6 +246,11 @@ func (eng sesEngine) DropDatabase(dn types.Identifier, ifExists bool) error {
 	return nil
 }
 
+func (eng sesEngine) ListDatabases() ([]types.Identifier, error) {
+	fmt.Fprintln(eng.trace, "ListDatabase()")
+	return nil, nil
+}
+
 func (eng sesEngine) Begin() engine.Transaction {
 	fmt.Fprintln(eng.trace, "Begin()")
 
