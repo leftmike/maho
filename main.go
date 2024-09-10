@@ -6,7 +6,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/leftmike/maho/pkg/parser"
+	"github.com/leftmike/maho/parser"
 )
 
 /*
