@@ -116,6 +116,53 @@ func TestDatabase(t *testing.T) {
 				types.ID("db2", false),
 			},
 		},
+		createDatabase{
+			dn: types.ID("db3", false),
+		},
+		listDatabases{
+			databases: []types.Identifier{
+				types.SYSTEM,
+				types.MAHO,
+				types.ID("db", false),
+				types.ID("db2", false),
+				types.ID("db3", false),
+			},
+		},
+		dropDatabase{
+			dn: types.ID("db2", false),
+		},
+		listDatabases{
+			databases: []types.Identifier{
+				types.SYSTEM,
+				types.MAHO,
+				types.ID("db", false),
+				types.ID("db3", false),
+			},
+		},
+		dropDatabase{
+			dn:   types.ID("db2", false),
+			fail: true,
+		},
+		listDatabases{
+			databases: []types.Identifier{
+				types.SYSTEM,
+				types.MAHO,
+				types.ID("db", false),
+				types.ID("db3", false),
+			},
+		},
+		dropDatabase{
+			dn:       types.ID("db2", false),
+			ifExists: true,
+		},
+		listDatabases{
+			databases: []types.Identifier{
+				types.SYSTEM,
+				types.MAHO,
+				types.ID("db", false),
+				types.ID("db3", false),
+			},
+		},
 	}
 
 	eng := newEngine(t)
@@ -131,7 +178,14 @@ func TestDatabase(t *testing.T) {
 				t.Errorf("CreateDatabase(%s) failed with %s", c.dn, err)
 			}
 		case dropDatabase:
-			// XXX
+			err := eng.DropDatabase(c.dn, c.ifExists)
+			if c.fail {
+				if err == nil {
+					t.Errorf("DropDatabase(%s, %v) did not fail", c.dn, c.ifExists)
+				}
+			} else if err != nil {
+				t.Errorf("DropDatabase(%s, %v) failed with %s", c.dn, c.ifExists, err)
+			}
 		case listDatabases:
 			databases, err := eng.ListDatabases()
 			if err != nil {
@@ -249,6 +303,104 @@ func TestSchema(t *testing.T) {
 		},
 		rollback{},
 	})
+
+	testEngine(t, eng.Begin(), []interface{}{
+		listSchemas{
+			dn: types.MAHO,
+			schemas: []types.Identifier{
+				types.ID("public", false),
+				types.ID("test", false),
+				types.ID("test2", false),
+				types.ID("test3", false),
+			},
+		},
+		dropSchema{
+			sn: types.SchemaName{
+				Database: types.MAHO,
+				Schema:   types.ID("test2", false),
+			},
+		},
+		listSchemas{
+			dn: types.MAHO,
+			schemas: []types.Identifier{
+				types.ID("public", false),
+				types.ID("test", false),
+				types.ID("test3", false),
+			},
+		},
+		commit{},
+	})
+
+	testEngine(t, eng.Begin(), []interface{}{
+		listSchemas{
+			dn: types.MAHO,
+			schemas: []types.Identifier{
+				types.ID("public", false),
+				types.ID("test", false),
+				types.ID("test3", false),
+			},
+		},
+		dropSchema{
+			sn: types.SchemaName{
+				Database: types.MAHO,
+				Schema:   types.ID("test", false),
+			},
+		},
+		listSchemas{
+			dn: types.MAHO,
+			schemas: []types.Identifier{
+				types.ID("public", false),
+				types.ID("test3", false),
+			},
+		},
+		rollback{},
+	})
+
+	testEngine(t, eng.Begin(), []interface{}{
+		listSchemas{
+			dn: types.MAHO,
+			schemas: []types.Identifier{
+				types.ID("public", false),
+				types.ID("test", false),
+				types.ID("test3", false),
+			},
+		},
+		dropSchema{
+			sn: types.SchemaName{
+				Database: types.MAHO,
+				Schema:   types.ID("test2", false),
+			},
+			fail: true,
+		},
+		rollback{},
+	})
+
+	testEngine(t, eng.Begin(), []interface{}{
+		listSchemas{
+			dn: types.MAHO,
+			schemas: []types.Identifier{
+				types.ID("public", false),
+				types.ID("test", false),
+				types.ID("test3", false),
+			},
+		},
+		dropSchema{
+			sn: types.SchemaName{
+				Database: types.MAHO,
+				Schema:   types.ID("test2", false),
+			},
+			ifExists: true,
+		},
+		listSchemas{
+			dn: types.MAHO,
+			schemas: []types.Identifier{
+				types.ID("public", false),
+				types.ID("test", false),
+				types.ID("test3", false),
+			},
+		},
+		rollback{},
+	})
 }
 
 type createSchema struct {
@@ -256,7 +408,11 @@ type createSchema struct {
 	fail bool
 }
 
-// XXX: dropSchema
+type dropSchema struct {
+	sn       types.SchemaName
+	ifExists bool
+	fail     bool
+}
 
 type listSchemas struct {
 	dn      types.Identifier
@@ -279,7 +435,15 @@ func testEngine(t *testing.T, tx engine.Transaction, cases []interface{}) {
 			} else if err != nil {
 				t.Errorf("CreateSchema(%s) failed with %s", c.sn, err)
 			}
-		// XXX: dropSchema
+		case dropSchema:
+			err := tx.DropSchema(ctx, c.sn, c.ifExists)
+			if c.fail {
+				if err == nil {
+					t.Errorf("DropSchema(%s, %v) did not fail", c.sn, c.ifExists)
+				}
+			} else if err != nil {
+				t.Errorf("DropSchema(%s, %v) failed with %s", c.sn, c.ifExists, err)
+			}
 		case listSchemas:
 			schemas, err := tx.ListSchemas(ctx, c.dn)
 			if c.fail {

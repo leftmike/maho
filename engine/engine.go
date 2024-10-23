@@ -119,17 +119,12 @@ type tablesRow struct {
 	Type     []byte `maho:"size=8192,notnull"`
 }
 
-func (eng *engine) CreateDatabase(dn types.Identifier, opts storage.OptionsMap) error {
-	for key := range opts {
-		return fmt.Errorf("engine: unexpected option: %s", key)
-	}
+func (eng *engine) withTransaction(
+	fn func(tx storage.Transaction, ctx context.Context) error) error {
 
 	tx := eng.store.Begin()
 	ctx := context.Background()
-	err := TypedTableInsert(ctx, tx, databasesTypedInfo,
-		&databasesRow{
-			Database: dn.String(),
-		})
+	err := fn(tx, ctx)
 	if err != nil {
 		tx.Rollback()
 		return err
@@ -138,9 +133,44 @@ func (eng *engine) CreateDatabase(dn types.Identifier, opts storage.OptionsMap) 
 	return tx.Commit(ctx)
 }
 
+func (eng *engine) CreateDatabase(dn types.Identifier, opts storage.OptionsMap) error {
+	for key := range opts {
+		return fmt.Errorf("engine: unexpected option: %s", key)
+	}
+
+	return eng.withTransaction(
+		func(tx storage.Transaction, ctx context.Context) error {
+			return TypedTableInsert(ctx, tx, databasesTypedInfo,
+				&databasesRow{
+					Database: dn.String(),
+				})
+		})
+}
+
 func (eng *engine) DropDatabase(dn types.Identifier, ifExists bool) error {
-	// XXX
-	return nil
+	return eng.withTransaction(
+		func(tx storage.Transaction, ctx context.Context) error {
+			dr := &databasesRow{
+				Database: dn.String(),
+			}
+			var deleted bool
+			err := TypedTableDelete(ctx, tx, databasesTypedInfo, dr, dr,
+				func(row types.Row) (bool, error) {
+					deleted = true
+					return true, nil
+				})
+			if err != nil {
+				return err
+			} else if !deleted {
+				if ifExists {
+					return nil
+				}
+				return fmt.Errorf("engine: database not found: %s", dn)
+			}
+
+			// XXX: delete schemas and tables etc in the database
+			return nil
+		})
 }
 
 func (eng *engine) ListDatabases() ([]types.Identifier, error) {
@@ -202,20 +232,34 @@ func (tx *transaction) CreateSchema(ctx context.Context, sn types.SchemaName) er
 		return err
 	}
 
-	err = TypedTableInsert(ctx, tx.tx, schemasTypedInfo,
+	return TypedTableInsert(ctx, tx.tx, schemasTypedInfo,
 		&schemasRow{
 			Database: sn.Database.String(),
 			Schema:   sn.Schema.String(),
 		})
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
 
 func (tx *transaction) DropSchema(ctx context.Context, sn types.SchemaName, ifExists bool) error {
-	// XXX
+	sr := &schemasRow{
+		Database: sn.Database.String(),
+		Schema:   sn.Schema.String(),
+	}
+	var deleted bool
+	err := TypedTableDelete(ctx, tx.tx, schemasTypedInfo, sr, sr,
+		func(row types.Row) (bool, error) {
+			deleted = true
+			return true, nil
+		})
+	if err != nil {
+		return err
+	} else if !deleted {
+		if ifExists {
+			return nil
+		}
+		return fmt.Errorf("engine: schema not found: %s", sn)
+	}
+
+	// XXX: delete tables etc in the schema
 	return nil
 }
 
