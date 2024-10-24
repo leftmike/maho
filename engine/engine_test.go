@@ -403,6 +403,30 @@ func TestSchema(t *testing.T) {
 	})
 }
 
+func TestTable(t *testing.T) {
+	eng := newEngine(t)
+
+	colNames1 := []types.Identifier{}
+	colTypes1 := []types.ColumnType{}
+	primary1 := []types.ColumnKey{}
+
+	testEngine(t, eng.Begin(), []interface{}{
+		createTable{
+			tn: types.TableName{
+				Database: types.MAHO,
+				Schema:   types.PUBLIC,
+				Table:    types.ID("test", false),
+			},
+			colNames: colNames1,
+			colTypes: colTypes1,
+			primary:  primary1,
+		},
+		commit{},
+	})
+
+	// XXX: test CreateTable and OpenTable
+}
+
 type createSchema struct {
 	sn   types.SchemaName
 	fail bool
