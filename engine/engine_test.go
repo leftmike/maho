@@ -420,6 +420,23 @@ type listSchemas struct {
 	fail    bool
 }
 
+type openTable struct {
+	tn       types.TableName
+	colNames []types.Identifier
+	colTypes []types.ColumnType
+	primary  []types.ColumnKey
+	tid      storage.TableId
+	fail     bool
+}
+
+type createTable struct {
+	tn       types.TableName
+	colNames []types.Identifier
+	colTypes []types.ColumnType
+	primary  []types.ColumnKey
+	fail     bool
+}
+
 func testEngine(t *testing.T, tx engine.Transaction, cases []interface{}) {
 	t.Helper()
 
@@ -458,6 +475,42 @@ func testEngine(t *testing.T, tx engine.Transaction, cases []interface{}) {
 				if !reflect.DeepEqual(schemas, c.schemas) {
 					t.Errorf("ListSchemas(%s) got %v want %v", c.dn, schemas, c.schemas)
 				}
+			}
+		case openTable:
+			tbl, err := tx.OpenTable(ctx, c.tn)
+			if c.fail {
+				if err == nil {
+					t.Errorf("OpenTable(%s) did not fail", c.tn)
+				}
+			} else if err != nil {
+				t.Errorf("OpenTable(%s) failed with %s", c.tn, err)
+			} else {
+				tn := tbl.Name()
+				if tn != c.tn {
+					t.Errorf("Name(%s) got %s want %s", c.tn, tn, c.tn)
+				}
+				tt := tbl.Type()
+				if !reflect.DeepEqual(tt.ColumnNames, c.colNames) {
+					t.Errorf("ColumnNames(%s) got %v want %v", c.tn, tt.ColumnNames, c.colNames)
+				}
+				if !reflect.DeepEqual(tt.ColumnTypes, c.colTypes) {
+					t.Errorf("ColumnTypes(%s) got %v want %v", c.tn, tt.ColumnTypes, c.colTypes)
+				}
+				if !reflect.DeepEqual(tt.Key, c.primary) {
+					t.Errorf("Key(%s) got %v want %v", c.tn, tt.Key, c.primary)
+				}
+				/*
+					XXX:	tid  storage.TableId
+				*/
+			}
+		case createTable:
+			err := tx.CreateTable(ctx, c.tn, c.colNames, c.colTypes, c.primary)
+			if c.fail {
+				if err == nil {
+					t.Errorf("CreateTable(%s) did not fail", c.tn)
+				}
+			} else if err != nil {
+				t.Errorf("CreateTable(%s) failed with %s", c.tn, err)
 			}
 		case commit:
 			err := tx.Commit(ctx)

@@ -16,7 +16,7 @@ var (
 			ti: sequencesTypedInfo,
 			structs: []interface{}{
 				&sequencesRow{
-					Sequence: "next_table_id",
+					Sequence: nextTableIdSequence,
 					Current:  int64(maxReservedTableId + 1),
 				},
 			},

@@ -71,13 +71,20 @@ type transaction struct {
 	tx storage.Transaction
 }
 
+type table struct {
+	tn  types.TableName
+	tt  *TableType
+	tid storage.TableId
+}
+
 const (
 	sequencesTableId storage.TableId = iota + storage.EngineTableId
 	databasesTableId
 	schemasTableId
 	tablesTableId
 
-	maxReservedTableId storage.TableId = 511
+	maxReservedTableId  storage.TableId = 511
+	nextTableIdSequence                 = "next_table_id"
 )
 
 func NewEngine(store storage.Store) Engine {
@@ -298,8 +305,28 @@ func (tx *transaction) ListSchemas(ctx context.Context, dn types.Identifier) ([]
 }
 
 func (tx *transaction) OpenTable(ctx context.Context, tn types.TableName) (Table, error) {
-	// XXX
-	return nil, nil
+	tr := tablesRow{
+		Database: tn.Database.String(),
+		Schema:   tn.Schema.String(),
+		Table:    tn.Table.String(),
+	}
+	err := TypedTableLookup(ctx, tx.tx, tablesTypedInfo, &tr)
+	if err == io.EOF {
+		return nil, fmt.Errorf("engine: table not found: %s", tn)
+	} else if err != nil {
+		return nil, err
+	}
+
+	tt, err := DecodeTableType(tr.Type)
+	if err != nil {
+		return nil, err
+	}
+
+	return &table{
+		tn:  tn,
+		tt:  tt,
+		tid: storage.TableId(tr.TableId),
+	}, nil
 }
 
 func (tt *TableType) Encode() ([]byte, error) {
@@ -322,11 +349,67 @@ func DecodeTableType(buf []byte) (*TableType, error) {
 	return &tt, nil
 }
 
+func (tx *transaction) nextTableId(ctx context.Context) (int64, error) {
+	var tid int64
+	sr := &sequencesRow{
+		Sequence: nextTableIdSequence,
+	}
+	err := TypedTableUpdate(ctx, tx.tx, sequencesTypedInfo, sr, sr,
+		func(row types.Row) (interface{}, error) {
+			var sr sequencesRow
+			sequencesTypedInfo.RowToStruct(row, &sr)
+			tid = sr.Current
+			return &struct {
+				Current int64
+			}{
+				Current: tid + 1,
+			}, nil
+		})
+	if err != nil {
+		return 0, err
+	}
+
+	return tid, nil
+}
+
 func (tx *transaction) CreateTable(ctx context.Context, tn types.TableName,
 	colNames []types.Identifier, colTypes []types.ColumnType, primary []types.ColumnKey) error {
 
-	// XXX
-	return nil
+	err := TypedTableLookup(ctx, tx.tx, schemasTypedInfo,
+		&schemasRow{
+			Database: tn.Database.String(),
+			Schema:   tn.Schema.String(),
+		})
+	if err == io.EOF {
+		return fmt.Errorf("engine: schema not found: %s", tn.SchemaName())
+	} else if err != nil {
+		return err
+	}
+
+	tt := TableType{
+		Version:     1,
+		ColumnNames: colNames,
+		ColumnTypes: colTypes,
+		Key:         primary,
+		// XXX: ColumnDefaults
+		// XXX: Indexes
+	}
+	buf, err := tt.Encode()
+	if err != nil {
+		return err
+	}
+	tid, err := tx.nextTableId(ctx)
+	if err != nil {
+		return err
+	}
+	return TypedTableInsert(ctx, tx.tx, tablesTypedInfo,
+		&tablesRow{
+			Database: tn.Database.String(),
+			Schema:   tn.Schema.String(),
+			Table:    tn.Table.String(),
+			TableId:  tid,
+			Type:     buf,
+		})
 }
 
 func (tx *transaction) DropTable(ctx context.Context, tn types.TableName) error {
@@ -353,4 +436,12 @@ func (tx *transaction) DropIndex(ctx context.Context, tn types.TableName,
 
 	// XXX
 	return nil
+}
+
+func (tbl *table) Name() types.TableName {
+	return tbl.tn
+}
+
+func (tbl *table) Type() *TableType {
+	return tbl.tt
 }
