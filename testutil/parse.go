@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"runtime"
 	"strconv"
 	"strings"
 	"unicode"
@@ -23,19 +24,50 @@ var (
 	errExpectedNumber            = errors.New("parse: expected number")
 )
 
-func skipWhitespace(rs io.RuneScanner) (rune, error) {
+func panicError(err error) {
+	panic(err)
+}
+
+func readRune(rs io.RuneScanner) rune {
+	r, _, err := rs.ReadRune()
+	if err == io.EOF {
+		panicError(errUnexpectedEOF)
+	} else if err != nil {
+		panicError(err)
+	}
+
+	return r
+}
+
+func skipWhitespace(rs io.RuneScanner, eofAllowed bool) (rune, bool) {
 	for {
 		r, _, err := rs.ReadRune()
-		if err != nil {
-			return 0, err
+		if err == io.EOF {
+			if eofAllowed {
+				return 0, true
+			}
+			panicError(errUnexpectedEOF)
+		} else if err != nil {
+			panicError(err)
 		}
 		if !unicode.IsSpace(r) {
-			return r, nil
+			return r, false
 		}
 	}
 }
 
-func readRunes(rs io.RuneScanner, r rune, eofError bool, pred func(rune) bool) (string, error) {
+func expectRune(rs io.RuneScanner, e rune, err error, eofAllowed bool) bool {
+	r, eof := skipWhitespace(rs, eofAllowed)
+	if eof {
+		return true
+	} else if r != e {
+		panicError(err)
+	}
+
+	return false
+}
+
+func readRunes(rs io.RuneScanner, r rune, eofAllowed bool, pred func(rune) bool) string {
 	var buf strings.Builder
 	if r != 0 {
 		buf.WriteRune(r)
@@ -44,12 +76,12 @@ func readRunes(rs io.RuneScanner, r rune, eofError bool, pred func(rune) bool) (
 	for {
 		r, _, err := rs.ReadRune()
 		if err == io.EOF {
-			if eofError {
-				return "", errUnexpectedEOF
+			if eofAllowed {
+				break
 			}
-			break
+			panicError(errUnexpectedEOF)
 		} else if err != nil {
-			return "", errUnexpectedEOF
+			panicError(err)
 		}
 
 		if pred(r) {
@@ -60,7 +92,7 @@ func readRunes(rs io.RuneScanner, r rune, eofError bool, pred func(rune) bool) (
 		}
 	}
 
-	return buf.String(), nil
+	return buf.String()
 }
 
 func hexDigit(ch byte) byte {
@@ -72,81 +104,54 @@ func hexDigit(ch byte) byte {
 	return ch - 'A' + 10
 }
 
-func ParseValue(rs io.RuneScanner) (types.Value, error) {
-	r, err := skipWhitespace(rs)
-	if err != nil {
-		return nil, err
-	}
+func parseValue(rs io.RuneScanner) types.Value {
+	r, _ := skipWhitespace(rs, false)
 
 	if unicode.IsDigit(r) || r == '.' {
-		s, err := readRunes(rs, r, false,
+		s := readRunes(rs, r, true,
 			func(r rune) bool {
 				return unicode.IsDigit(r) || r == '.'
 			})
-		if err != nil {
-			return nil, err
-		}
 
 		if i, err := strconv.ParseInt(s, 10, 64); err == nil {
-			return types.Int64Value(i), nil
+			return types.Int64Value(i)
 		}
 
 		if f, err := strconv.ParseFloat(s, 64); err == nil {
-			return types.Float64Value(f), nil
+			return types.Float64Value(f)
 		}
-		return nil, fmt.Errorf("parse: expected a number: %s", s)
+		panicError(fmt.Errorf("parse: expected a number: %s", s))
 	} else if unicode.IsLetter(r) {
-		s, err := readRunes(rs, r, false,
-			func(r rune) bool {
-				return unicode.IsLetter(r)
-			})
-		if err != nil {
-			return nil, err
-		}
-
-		s = strings.ToLower(s)
+		s := strings.ToLower(readRunes(rs, r, true, unicode.IsLetter))
 		switch s {
 		case "true":
-			return types.BoolValue(true), nil
+			return types.BoolValue(true)
 		case "false":
-			return types.BoolValue(false), nil
+			return types.BoolValue(false)
 		case "null":
-			return nil, nil
+			return nil
 		default:
-			return nil, fmt.Errorf("parse: unexpected identifier: %s", s)
+			panicError(fmt.Errorf("parse: unexpected identifier: %s", s))
 		}
 	} else if r != '\'' {
-		return nil, fmt.Errorf("parse: unexpected rune parsing value: %v %d", r, r)
+		panicError(fmt.Errorf("parse: unexpected rune parsing value: %v %d", r, r))
 	}
 
-	r, _, err = rs.ReadRune()
-	if err == io.EOF {
-		return nil, errUnexpectedEOF
-	} else if err != nil {
-		return nil, err
-	}
-
+	r = readRune(rs)
 	if r == '\\' {
-		r, _, err = rs.ReadRune()
-		if err == io.EOF {
-			return nil, errUnexpectedEOF
-		} else if err != nil {
-			return nil, err
-		} else if r != 'x' && r != 'X' {
-			return nil, errBadBytesString
+		r = readRune(rs)
+		if r != 'x' && r != 'X' {
+			panicError(errBadBytesString)
 		}
 
-		s, err := readRunes(rs, 0, true,
+		s := readRunes(rs, 0, false,
 			func(r rune) bool {
 				return r != '\''
 			})
-		if err != nil {
-			return nil, err
-		}
 		rs.ReadRune()
 
 		if len(s)%2 != 0 {
-			return nil, errBadBytesString
+			panicError(errBadBytesString)
 		}
 
 		b := make([]byte, len(s)/2)
@@ -154,85 +159,101 @@ func ParseValue(rs io.RuneScanner) (types.Value, error) {
 			b[idx/2] = (hexDigit(s[idx]) << 4) | hexDigit(s[idx+1])
 		}
 
-		return types.BytesValue(b), nil
+		return types.BytesValue(b)
 	} else if r == '\'' {
-		return types.StringValue(""), nil
+		return types.StringValue("")
 	}
 
-	s, err := readRunes(rs, r, true,
+	s := readRunes(rs, r, false,
 		func(r rune) bool {
 			return r != '\''
 		})
-	if err != nil {
-		return nil, err
-	}
 	rs.ReadRune()
 
-	return types.StringValue(s), nil
+	return types.StringValue(s)
 }
 
-func ParseRow(rs io.RuneScanner) (types.Row, error) {
+func ParseValue(rs io.RuneScanner) (val types.Value, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			if _, ok := r.(runtime.Error); ok {
+				panic(r)
+			}
+			err = r.(error)
+			val = nil
+		}
+	}()
+
+	val = parseValue(rs)
+	return
+}
+
+func parseRow(rs io.RuneScanner) types.Row {
 	// (123, 'abc', true, 456.789, '\x010203')
 
-	r, err := skipWhitespace(rs)
-	if err != nil {
-		return nil, err
-	}
-
-	if r != '(' {
-		return nil, errExpectedOpenParen
-	}
+	expectRune(rs, '(', errExpectedOpenParen, false)
 
 	var row types.Row
 	for {
-		_, err := skipWhitespace(rs)
-		if err != nil {
-			return nil, err
-		}
+		skipWhitespace(rs, false)
 		rs.UnreadRune()
 
-		val, err := ParseValue(rs)
-		if err != nil {
-			return nil, err
-		}
-		row = append(row, val)
+		row = append(row, parseValue(rs))
 
-		r, err := skipWhitespace(rs)
-		if err != nil {
-			return nil, err
-		}
+		r, _ := skipWhitespace(rs, false)
 		if r == ')' {
 			break
 		} else if r != ',' {
-			return nil, errExpectedCommaOrCloseParen
+			panicError(errExpectedCommaOrCloseParen)
 		}
 	}
 
-	return row, nil
+	return row
 }
 
-func ParseRows(rs io.RuneScanner) ([]types.Row, error) {
+func ParseRow(rs io.RuneScanner) (row types.Row, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			if _, ok := r.(runtime.Error); ok {
+				panic(r)
+			}
+			err = r.(error)
+			row = nil
+		}
+	}()
+
+	row = parseRow(rs)
+	return
+}
+
+func parseRows(rs io.RuneScanner) []types.Row {
 	// (123, 'abc', true), (456, 'def', false), (789, 'ghi', null)
 
 	var rows []types.Row
 	for {
-		row, err := ParseRow(rs)
-		if err != nil {
-			return nil, err
-		}
-		rows = append(rows, row)
+		rows = append(rows, parseRow(rs))
 
-		r, err := skipWhitespace(rs)
-		if err == io.EOF {
+		if expectRune(rs, ',', errExpectedComma, true) {
 			break
-		} else if err != nil {
-			return nil, err
-		} else if r != ',' {
-			return nil, errExpectedComma
 		}
 	}
 
-	return rows, nil
+	return rows
+}
+
+func ParseRows(rs io.RuneScanner) (rows []types.Row, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			if _, ok := r.(runtime.Error); ok {
+				panic(r)
+			}
+			err = r.(error)
+			rows = nil
+		}
+	}()
+
+	rows = parseRows(rs)
+	return
 }
 
 func MustParseRow(s string) types.Row {
@@ -251,131 +272,102 @@ func MustParseRows(s string) []types.Row {
 	return rows
 }
 
-func ParseIdentifier(rs io.RuneScanner) (types.Identifier, error) {
-	r, err := skipWhitespace(rs)
-	if err != nil {
-		return 0, err
-	}
-
-	var buf strings.Builder
-	for {
-		if !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '_' && r != '$' {
-			rs.UnreadRune()
-			break
-		}
-
-		buf.WriteRune(r)
-
-		r, _, err = rs.ReadRune()
-		if err != nil {
-			if err == io.EOF && buf.Len() > 0 {
-				break
-			}
-			return 0, err
-		}
-	}
-
-	s := buf.String()
-	if len(s) == 0 {
-		return 0, errExpectedIdentifier
-	}
-
-	return types.ID(buf.String(), false), nil
+func identifierRune(r rune) bool {
+	return unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' || r == '$'
 }
 
-func ParseIdentifiers(rs io.RuneScanner) ([]types.Identifier, error) {
+func parseIdentifier(rs io.RuneScanner) types.Identifier {
+	r, _ := skipWhitespace(rs, false)
+	if !identifierRune(r) {
+		panicError(errExpectedIdentifier)
+	}
+
+	return types.ID(readRunes(rs, r, true, identifierRune), false)
+}
+
+func ParseIdentifier(rs io.RuneScanner) (id types.Identifier, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			if _, ok := r.(runtime.Error); ok {
+				panic(r)
+			}
+			err = r.(error)
+			id = 0
+		}
+	}()
+
+	id = parseIdentifier(rs)
+	return
+}
+
+func parseIdentifiers(rs io.RuneScanner) []types.Identifier {
 	var ids []types.Identifier
 	for {
-		id, err := ParseIdentifier(rs)
-		if err != nil {
-			return nil, err
-		}
-		ids = append(ids, id)
+		ids = append(ids, parseIdentifier(rs))
 
-		r, err := skipWhitespace(rs)
-		if err == io.EOF {
+		if expectRune(rs, ',', errExpectedComma, true) {
 			break
-		} else if err != nil {
-			return nil, err
-		} else if r != ',' {
-			return nil, errExpectedComma
 		}
 	}
 
-	return ids, nil
+	return ids
 }
 
-func parseOptionalSize(rs io.RuneScanner) (uint32, bool, error) {
-	r, err := skipWhitespace(rs)
-	if err == io.EOF {
-		return 0, false, nil
-	} else if err != nil {
-		return 0, false, err
+func ParseIdentifiers(rs io.RuneScanner) (ids []types.Identifier, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			if _, ok := r.(runtime.Error); ok {
+				panic(r)
+			}
+			err = r.(error)
+			ids = nil
+		}
+	}()
+
+	ids = parseIdentifiers(rs)
+	return
+}
+
+func parseOptionalSize(rs io.RuneScanner) (uint32, bool) {
+	r, eof := skipWhitespace(rs, true)
+	if eof {
+		return 0, false
 	} else if r != '(' {
 		rs.UnreadRune()
-		return 0, false, nil
+		return 0, false
 	}
 
-	r, err = skipWhitespace(rs)
-	if err != nil {
-		return 0, false, err
-	}
-
+	r, _ = skipWhitespace(rs, false)
 	if !unicode.IsDigit(r) {
-		return 0, false, errExpectedNumber
+		panicError(errExpectedNumber)
 	}
 
-	s, err := readRunes(rs, r, false,
-		func(r rune) bool {
-			return unicode.IsDigit(r)
-		})
+	i, err := strconv.ParseInt(readRunes(rs, r, true, unicode.IsDigit), 10, 64)
 	if err != nil {
-		return 0, false, err
+		panicError(err)
 	}
 
-	i, err := strconv.ParseInt(s, 10, 64)
-	if err != nil {
-		return 0, false, err
-	}
-
-	r, err = skipWhitespace(rs)
-	if err != nil {
-		return 0, false, err
-	} else if r != ')' {
-		return 0, false, errExpectedCloseParen
-	}
-
-	return uint32(i), true, nil
+	expectRune(rs, ')', errExpectedCloseParen, false)
+	return uint32(i), true
 }
 
-func ParseColumns(rs io.RuneScanner) ([]types.Identifier, []types.ColumnType, []types.ColumnKey,
-	error) {
-
+func parseColumns(rs io.RuneScanner) ([]types.Identifier, []types.ColumnType, []types.ColumnKey) {
 	// column data_type [PRIMARY KEY | NOT NULL], ...
 
 	var cols []types.Identifier
 	var colTypes []types.ColumnType
 	var key []types.ColumnKey
 	for {
-		col, err := ParseIdentifier(rs)
-		if err != nil {
-			return nil, nil, nil, err
-		}
-		cols = append(cols, col)
+		cols = append(cols, parseIdentifier(rs))
 
-		typ, err := ParseIdentifier(rs)
-		if err != nil {
-			return nil, nil, nil, err
-		}
+		typ := parseIdentifier(rs)
 		ct, found := parser.ColumnTypes[typ]
 		if !found {
-			return nil, nil, nil, fmt.Errorf("expected a data type, got %s", typ)
+			panicError(fmt.Errorf("expected a data type, got %s", typ))
 		}
 		if ct.Type == types.StringType || ct.Type == types.BytesType {
-			sz, ok, err := parseOptionalSize(rs)
-			if err != nil {
-				return nil, nil, nil, err
-			} else if ok {
+			sz, ok := parseOptionalSize(rs)
+			if ok {
 				ct.Size = sz
 			}
 		}
@@ -383,17 +375,31 @@ func ParseColumns(rs io.RuneScanner) ([]types.Identifier, []types.ColumnType, []
 
 		// XXX: [PRIMARY KEY | NOT NULL], ...
 
-		r, err := skipWhitespace(rs)
-		if err == io.EOF {
+		if expectRune(rs, ',', errExpectedComma, true) {
 			break
-		} else if err != nil {
-			return nil, nil, nil, err
-		} else if r != ',' {
-			return nil, nil, nil, errExpectedComma
 		}
 	}
 
-	return cols, colTypes, key, nil
+	return cols, colTypes, key
+}
+
+func ParseColumns(rs io.RuneScanner) (cols []types.Identifier, colTypes []types.ColumnType,
+	key []types.ColumnKey, err error) {
+
+	defer func() {
+		if r := recover(); r != nil {
+			if _, ok := r.(runtime.Error); ok {
+				panic(r)
+			}
+			err = r.(error)
+			cols = nil
+			colTypes = nil
+			key = nil
+		}
+	}()
+
+	cols, colTypes, key = parseColumns(rs)
+	return
 }
 
 func MustParseIdentifiers(s string) []types.Identifier {
