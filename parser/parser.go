@@ -616,7 +616,7 @@ func (p *Parser) parseCreateDetails(s *sql.CreateTable) {
 }
 
 var (
-	columnTypes = map[types.Identifier]types.ColumnType{
+	ColumnTypes = map[types.Identifier]types.ColumnType{
 		types.BINARY:    {Type: types.BytesType, Fixed: true, Size: 1},
 		types.VARBINARY: {Type: types.BytesType, Fixed: false, Size: 1},
 		types.BLOB:      {Type: types.BytesType, Fixed: false, Size: types.MaxColumnSize},
@@ -667,7 +667,7 @@ func (p *Parser) parseColumnType() types.ColumnType {
 	*/
 
 	typ := p.expectIdentifier("expected a data type")
-	ct, found := columnTypes[typ]
+	ct, found := ColumnTypes[typ]
 	if !found {
 		p.error(fmt.Sprintf("expected a data type, got %s", typ))
 	}

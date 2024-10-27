@@ -8,6 +8,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/leftmike/maho/parser"
 	"github.com/leftmike/maho/types"
 )
 
@@ -16,7 +17,10 @@ var (
 	errBadBytesString            = errors.New("parse: bad bytes string")
 	errExpectedComma             = errors.New("parse: expected comma")
 	errExpectedOpenParen         = errors.New("parse: expected open paren")
+	errExpectedCloseParen        = errors.New("parse: expected close paren")
 	errExpectedCommaOrCloseParen = errors.New("parse: expected comma or close paren")
+	errExpectedIdentifier        = errors.New("parse: expected identifier")
+	errExpectedNumber            = errors.New("parse: expected number")
 )
 
 func skipWhitespace(rs io.RuneScanner) (rune, error) {
@@ -191,7 +195,6 @@ func ParseRow(rs io.RuneScanner) (types.Row, error) {
 		if err != nil {
 			return nil, err
 		}
-
 		row = append(row, val)
 
 		r, err := skipWhitespace(rs)
@@ -217,7 +220,6 @@ func ParseRows(rs io.RuneScanner) ([]types.Row, error) {
 		if err != nil {
 			return nil, err
 		}
-
 		rows = append(rows, row)
 
 		r, err := skipWhitespace(rs)
@@ -236,7 +238,7 @@ func ParseRows(rs io.RuneScanner) ([]types.Row, error) {
 func MustParseRow(s string) types.Row {
 	row, err := ParseRow(strings.NewReader(s))
 	if err != nil {
-		panic(fmt.Sprintf("must parse row: %s: %s", err, s))
+		panic(fmt.Sprintf("must parse row: %s: %s", s, err))
 	}
 	return row
 }
@@ -244,7 +246,169 @@ func MustParseRow(s string) types.Row {
 func MustParseRows(s string) []types.Row {
 	rows, err := ParseRows(strings.NewReader(s))
 	if err != nil {
-		panic(fmt.Sprintf("must parse rows: %s: %s", err, s))
+		panic(fmt.Sprintf("must parse rows: %s: %s", s, err))
 	}
 	return rows
+}
+
+func ParseIdentifier(rs io.RuneScanner) (types.Identifier, error) {
+	r, err := skipWhitespace(rs)
+	if err != nil {
+		return 0, err
+	}
+
+	var buf strings.Builder
+	for {
+		if !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '_' && r != '$' {
+			rs.UnreadRune()
+			break
+		}
+
+		buf.WriteRune(r)
+
+		r, _, err = rs.ReadRune()
+		if err != nil {
+			if err == io.EOF && buf.Len() > 0 {
+				break
+			}
+			return 0, err
+		}
+	}
+
+	s := buf.String()
+	if len(s) == 0 {
+		return 0, errExpectedIdentifier
+	}
+
+	return types.ID(buf.String(), false), nil
+}
+
+func ParseIdentifiers(rs io.RuneScanner) ([]types.Identifier, error) {
+	var ids []types.Identifier
+	for {
+		id, err := ParseIdentifier(rs)
+		if err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+
+		r, err := skipWhitespace(rs)
+		if err == io.EOF {
+			break
+		} else if err != nil {
+			return nil, err
+		} else if r != ',' {
+			return nil, errExpectedComma
+		}
+	}
+
+	return ids, nil
+}
+
+func parseOptionalSize(rs io.RuneScanner) (uint32, bool, error) {
+	r, err := skipWhitespace(rs)
+	if err == io.EOF {
+		return 0, false, nil
+	} else if err != nil {
+		return 0, false, err
+	} else if r != '(' {
+		rs.UnreadRune()
+		return 0, false, nil
+	}
+
+	r, err = skipWhitespace(rs)
+	if err != nil {
+		return 0, false, err
+	}
+
+	if !unicode.IsDigit(r) {
+		return 0, false, errExpectedNumber
+	}
+
+	s, err := readRunes(rs, r, false,
+		func(r rune) bool {
+			return unicode.IsDigit(r)
+		})
+	if err != nil {
+		return 0, false, err
+	}
+
+	i, err := strconv.ParseInt(s, 10, 64)
+	if err != nil {
+		return 0, false, err
+	}
+
+	r, err = skipWhitespace(rs)
+	if err != nil {
+		return 0, false, err
+	} else if r != ')' {
+		return 0, false, errExpectedCloseParen
+	}
+
+	return uint32(i), true, nil
+}
+
+func ParseColumns(rs io.RuneScanner) ([]types.Identifier, []types.ColumnType, []types.ColumnKey,
+	error) {
+
+	// column data_type [PRIMARY KEY | NOT NULL], ...
+
+	var cols []types.Identifier
+	var colTypes []types.ColumnType
+	var key []types.ColumnKey
+	for {
+		col, err := ParseIdentifier(rs)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		cols = append(cols, col)
+
+		typ, err := ParseIdentifier(rs)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		ct, found := parser.ColumnTypes[typ]
+		if !found {
+			return nil, nil, nil, fmt.Errorf("expected a data type, got %s", typ)
+		}
+		if ct.Type == types.StringType || ct.Type == types.BytesType {
+			sz, ok, err := parseOptionalSize(rs)
+			if err != nil {
+				return nil, nil, nil, err
+			} else if ok {
+				ct.Size = sz
+			}
+		}
+		colTypes = append(colTypes, ct)
+
+		// XXX: [PRIMARY KEY | NOT NULL], ...
+
+		r, err := skipWhitespace(rs)
+		if err == io.EOF {
+			break
+		} else if err != nil {
+			return nil, nil, nil, err
+		} else if r != ',' {
+			return nil, nil, nil, errExpectedComma
+		}
+	}
+
+	return cols, colTypes, key, nil
+}
+
+func MustParseIdentifiers(s string) []types.Identifier {
+	ids, err := ParseIdentifiers(strings.NewReader(s))
+	if err != nil {
+		panic(fmt.Sprintf("must parse identifiers: %s: %s", s, err))
+	}
+	return ids
+}
+
+func MustParseColumns(s string) ([]types.Identifier, []types.ColumnType, []types.ColumnKey) {
+	cols, colTypes, key, err := ParseColumns(strings.NewReader(s))
+	if err != nil {
+		panic(fmt.Sprintf("must parse columns: %s: %s", s, err))
+	}
+	return cols, colTypes, key
+
 }
