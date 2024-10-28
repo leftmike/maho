@@ -276,13 +276,25 @@ func identifierRune(r rune) bool {
 	return unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' || r == '$'
 }
 
-func parseIdentifier(rs io.RuneScanner) types.Identifier {
+func expectIdentifier(rs io.RuneScanner) types.Identifier {
 	r, _ := skipWhitespace(rs, false)
 	if !identifierRune(r) {
 		panicError(errExpectedIdentifier)
 	}
 
 	return types.ID(readRunes(rs, r, true, identifierRune), false)
+}
+
+func optionalIdentifier(rs io.RuneScanner) (types.Identifier, bool) {
+	r, eof := skipWhitespace(rs, true)
+	if eof {
+		return 0, false
+	} else if !identifierRune(r) {
+		rs.UnreadRune()
+		return 0, false
+	}
+
+	return types.ID(readRunes(rs, r, true, identifierRune), false), true
 }
 
 func ParseIdentifier(rs io.RuneScanner) (id types.Identifier, err error) {
@@ -296,14 +308,14 @@ func ParseIdentifier(rs io.RuneScanner) (id types.Identifier, err error) {
 		}
 	}()
 
-	id = parseIdentifier(rs)
+	id = expectIdentifier(rs)
 	return
 }
 
 func parseIdentifiers(rs io.RuneScanner) []types.Identifier {
 	var ids []types.Identifier
 	for {
-		ids = append(ids, parseIdentifier(rs))
+		ids = append(ids, expectIdentifier(rs))
 
 		if expectRune(rs, ',', errExpectedComma, true) {
 			break
@@ -358,9 +370,9 @@ func parseColumns(rs io.RuneScanner) ([]types.Identifier, []types.ColumnType, []
 	var colTypes []types.ColumnType
 	var key []types.ColumnKey
 	for {
-		cols = append(cols, parseIdentifier(rs))
+		cols = append(cols, expectIdentifier(rs))
 
-		typ := parseIdentifier(rs)
+		typ := expectIdentifier(rs)
 		ct, found := parser.ColumnTypes[typ]
 		if !found {
 			panicError(fmt.Errorf("expected a data type, got %s", typ))
@@ -371,9 +383,29 @@ func parseColumns(rs io.RuneScanner) ([]types.Identifier, []types.ColumnType, []
 				ct.Size = sz
 			}
 		}
-		colTypes = append(colTypes, ct)
 
-		// XXX: [PRIMARY KEY | NOT NULL], ...
+		for {
+			id, ok := optionalIdentifier(rs)
+			if !ok {
+				break
+			}
+
+			switch id {
+			case types.PRIMARY:
+				if expectIdentifier(rs) != types.KEY {
+					panicError(fmt.Errorf("expected KEY, got %s", id))
+				}
+				key = append(key, types.MakeColumnKey(types.ColumnNum(len(cols)-1), false))
+			case types.NOT:
+				if expectIdentifier(rs) != types.NULL {
+					panicError(fmt.Errorf("expected NULL, got %s", id))
+				}
+				ct.NotNull = true
+			default:
+				panicError(fmt.Errorf("expected a keyword, got %s", id))
+			}
+		}
+		colTypes = append(colTypes, ct)
 
 		if expectRune(rs, ',', errExpectedComma, true) {
 			break

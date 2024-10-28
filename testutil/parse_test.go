@@ -219,6 +219,32 @@ func TestParseColumns(t *testing.T) {
 		{s: "c1 binary 123)", fail: true},
 		{s: "c1 binary(123), c2 binary(456", fail: true},
 		{s: "c1 text()", fail: true},
+		{
+			s: "c1 int, c2 bool not null, c3 char primary key",
+			cols: []types.Identifier{types.ID("c1", false), types.ID("c2", false),
+				types.ID("c3", false)},
+			colTypes: []types.ColumnType{
+				{Type: types.Int64Type, Size: 4},
+				{Type: types.BoolType, Size: 1, NotNull: true},
+				{Type: types.StringType, Fixed: true, Size: 1},
+			},
+			key: []types.ColumnKey{types.MakeColumnKey(2, false)},
+		},
+		{
+			s: "c1 int not null primary key, c2 bool, c3 char primary key",
+			cols: []types.Identifier{types.ID("c1", false), types.ID("c2", false),
+				types.ID("c3", false)},
+			colTypes: []types.ColumnType{
+				{Type: types.Int64Type, Size: 4, NotNull: true},
+				{Type: types.BoolType, Size: 1},
+				{Type: types.StringType, Fixed: true, Size: 1},
+			},
+			key: []types.ColumnKey{types.MakeColumnKey(0, false), types.MakeColumnKey(2, false)},
+		},
+		{s: "c1 int not, c2 bool", fail: true},
+		{s: "c1 int, c2 bool primary", fail: true},
+		{s: "c1 int null, c2 bool", fail: true},
+		{s: "c1 int, c2 bool 123", fail: true},
 	}
 
 	for _, c := range cases {
