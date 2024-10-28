@@ -10,6 +10,7 @@ import (
 	"github.com/leftmike/maho/engine"
 	"github.com/leftmike/maho/storage"
 	"github.com/leftmike/maho/storage/basic"
+	"github.com/leftmike/maho/testutil"
 	"github.com/leftmike/maho/types"
 )
 
@@ -99,69 +100,39 @@ func TestDatabase(t *testing.T) {
 			fail: true,
 		},
 		listDatabases{
-			databases: []types.Identifier{
-				types.SYSTEM,
-				types.MAHO,
-				types.ID("db", false),
-			},
+			databases: testutil.MustParseIdentifiers("system, maho, db"),
 		},
 		createDatabase{
 			dn: types.ID("db2", false),
 		},
 		listDatabases{
-			databases: []types.Identifier{
-				types.SYSTEM,
-				types.MAHO,
-				types.ID("db", false),
-				types.ID("db2", false),
-			},
+			databases: testutil.MustParseIdentifiers("system, maho, db, db2"),
 		},
 		createDatabase{
 			dn: types.ID("db3", false),
 		},
 		listDatabases{
-			databases: []types.Identifier{
-				types.SYSTEM,
-				types.MAHO,
-				types.ID("db", false),
-				types.ID("db2", false),
-				types.ID("db3", false),
-			},
+			databases: testutil.MustParseIdentifiers("system, maho, db, db2, db3"),
 		},
 		dropDatabase{
 			dn: types.ID("db2", false),
 		},
 		listDatabases{
-			databases: []types.Identifier{
-				types.SYSTEM,
-				types.MAHO,
-				types.ID("db", false),
-				types.ID("db3", false),
-			},
+			databases: testutil.MustParseIdentifiers("system, maho, db, db3"),
 		},
 		dropDatabase{
 			dn:   types.ID("db2", false),
 			fail: true,
 		},
 		listDatabases{
-			databases: []types.Identifier{
-				types.SYSTEM,
-				types.MAHO,
-				types.ID("db", false),
-				types.ID("db3", false),
-			},
+			databases: testutil.MustParseIdentifiers("system, maho, db, db3"),
 		},
 		dropDatabase{
 			dn:       types.ID("db2", false),
 			ifExists: true,
 		},
 		listDatabases{
-			databases: []types.Identifier{
-				types.SYSTEM,
-				types.MAHO,
-				types.ID("db", false),
-				types.ID("db3", false),
-			},
+			databases: testutil.MustParseIdentifiers("system, maho, db, db3"),
 		},
 	}
 
@@ -252,13 +223,8 @@ func TestSchema(t *testing.T) {
 			},
 		},
 		listSchemas{
-			dn: types.MAHO,
-			schemas: []types.Identifier{
-				types.ID("public", false),
-				types.ID("test", false),
-				types.ID("test2", false),
-				types.ID("test3", false),
-			},
+			dn:      types.MAHO,
+			schemas: testutil.MustParseIdentifiers("public, test, test2, test3"),
 		},
 		commit{},
 	})
@@ -271,27 +237,16 @@ func TestSchema(t *testing.T) {
 			},
 		},
 		listSchemas{
-			dn: types.MAHO,
-			schemas: []types.Identifier{
-				types.ID("public", false),
-				types.ID("test", false),
-				types.ID("test2", false),
-				types.ID("test3", false),
-				types.ID("test4", false),
-			},
+			dn:      types.MAHO,
+			schemas: testutil.MustParseIdentifiers("public, test, test2, test3, test4"),
 		},
 		rollback{},
 	})
 
 	testEngine(t, eng.Begin(), []interface{}{
 		listSchemas{
-			dn: types.MAHO,
-			schemas: []types.Identifier{
-				types.ID("public", false),
-				types.ID("test", false),
-				types.ID("test2", false),
-				types.ID("test3", false),
-			},
+			dn:      types.MAHO,
+			schemas: testutil.MustParseIdentifiers("public, test, test2, test3"),
 		},
 		rollback{},
 	})
@@ -306,13 +261,8 @@ func TestSchema(t *testing.T) {
 
 	testEngine(t, eng.Begin(), []interface{}{
 		listSchemas{
-			dn: types.MAHO,
-			schemas: []types.Identifier{
-				types.ID("public", false),
-				types.ID("test", false),
-				types.ID("test2", false),
-				types.ID("test3", false),
-			},
+			dn:      types.MAHO,
+			schemas: testutil.MustParseIdentifiers("public, test, test2, test3"),
 		},
 		dropSchema{
 			sn: types.SchemaName{
@@ -321,24 +271,16 @@ func TestSchema(t *testing.T) {
 			},
 		},
 		listSchemas{
-			dn: types.MAHO,
-			schemas: []types.Identifier{
-				types.ID("public", false),
-				types.ID("test", false),
-				types.ID("test3", false),
-			},
+			dn:      types.MAHO,
+			schemas: testutil.MustParseIdentifiers("public, test, test3"),
 		},
 		commit{},
 	})
 
 	testEngine(t, eng.Begin(), []interface{}{
 		listSchemas{
-			dn: types.MAHO,
-			schemas: []types.Identifier{
-				types.ID("public", false),
-				types.ID("test", false),
-				types.ID("test3", false),
-			},
+			dn:      types.MAHO,
+			schemas: testutil.MustParseIdentifiers("public, test, test3"),
 		},
 		dropSchema{
 			sn: types.SchemaName{
@@ -347,23 +289,16 @@ func TestSchema(t *testing.T) {
 			},
 		},
 		listSchemas{
-			dn: types.MAHO,
-			schemas: []types.Identifier{
-				types.ID("public", false),
-				types.ID("test3", false),
-			},
+			dn:      types.MAHO,
+			schemas: testutil.MustParseIdentifiers("public, test3"),
 		},
 		rollback{},
 	})
 
 	testEngine(t, eng.Begin(), []interface{}{
 		listSchemas{
-			dn: types.MAHO,
-			schemas: []types.Identifier{
-				types.ID("public", false),
-				types.ID("test", false),
-				types.ID("test3", false),
-			},
+			dn:      types.MAHO,
+			schemas: testutil.MustParseIdentifiers("public, test, test3"),
 		},
 		dropSchema{
 			sn: types.SchemaName{
@@ -377,12 +312,8 @@ func TestSchema(t *testing.T) {
 
 	testEngine(t, eng.Begin(), []interface{}{
 		listSchemas{
-			dn: types.MAHO,
-			schemas: []types.Identifier{
-				types.ID("public", false),
-				types.ID("test", false),
-				types.ID("test3", false),
-			},
+			dn:      types.MAHO,
+			schemas: testutil.MustParseIdentifiers("public, test, test3"),
 		},
 		dropSchema{
 			sn: types.SchemaName{
@@ -392,12 +323,8 @@ func TestSchema(t *testing.T) {
 			ifExists: true,
 		},
 		listSchemas{
-			dn: types.MAHO,
-			schemas: []types.Identifier{
-				types.ID("public", false),
-				types.ID("test", false),
-				types.ID("test3", false),
-			},
+			dn:      types.MAHO,
+			schemas: testutil.MustParseIdentifiers("public, test, test3"),
 		},
 		rollback{},
 	})

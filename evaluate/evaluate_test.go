@@ -199,11 +199,7 @@ func TestEvaluateCreateSchema(t *testing.T) {
 			},
 			{
 				fn: func(t *testing.T, tx engine.Transaction) {
-					testListSchemas(t, tx, dn, []types.Identifier{
-						types.ID("s1", false),
-						types.ID("s2", false),
-						types.ID("s3", false),
-					})
+					testListSchemas(t, tx, dn, testutil.MustParseIdentifiers("s1, s2, s3"))
 				},
 				trace: "ListSchemas(db)",
 			},
@@ -213,10 +209,7 @@ func TestEvaluateCreateSchema(t *testing.T) {
 			},
 			{
 				fn: func(t *testing.T, tx engine.Transaction) {
-					testListSchemas(t, tx, dn, []types.Identifier{
-						types.ID("s2", false),
-						types.ID("s3", false),
-					})
+					testListSchemas(t, tx, dn, testutil.MustParseIdentifiers("s2, s3"))
 				},
 				trace: "ListSchemas(db)",
 			},
@@ -226,9 +219,7 @@ func TestEvaluateCreateSchema(t *testing.T) {
 			},
 			{
 				fn: func(t *testing.T, tx engine.Transaction) {
-					testListSchemas(t, tx, dn, []types.Identifier{
-						types.ID("s2", false),
-					})
+					testListSchemas(t, tx, dn, testutil.MustParseIdentifiers("s2"))
 				},
 				trace: "ListSchemas(db)",
 			},
@@ -270,12 +261,7 @@ CreateTable(db.sn.t4, [c1 c2], [INT BOOL], [2 -1])`,
 			},
 			{
 				fn: func(t *testing.T, tx engine.Transaction) {
-					testListTables(t, tx, sn, []types.Identifier{
-						types.ID("t1", false),
-						types.ID("t2", false),
-						types.ID("t3", false),
-						types.ID("t4", false),
-					})
+					testListTables(t, tx, sn, testutil.MustParseIdentifiers("t1, t2, t3, t4"))
 				},
 				trace: "ListTables(db.sn)",
 			},
@@ -285,11 +271,7 @@ CreateTable(db.sn.t4, [c1 c2], [INT BOOL], [2 -1])`,
 			},
 			{
 				fn: func(t *testing.T, tx engine.Transaction) {
-					testListTables(t, tx, sn, []types.Identifier{
-						types.ID("t2", false),
-						types.ID("t3", false),
-						types.ID("t4", false),
-					})
+					testListTables(t, tx, sn, testutil.MustParseIdentifiers("t2, t3, t4"))
 				},
 				trace: "ListTables(db.sn)",
 			},
@@ -299,10 +281,7 @@ CreateTable(db.sn.t4, [c1 c2], [INT BOOL], [2 -1])`,
 			},
 			{
 				fn: func(t *testing.T, tx engine.Transaction) {
-					testListTables(t, tx, sn, []types.Identifier{
-						types.ID("t2", false),
-						types.ID("t4", false),
-					})
+					testListTables(t, tx, sn, testutil.MustParseIdentifiers("t2, t4"))
 				},
 				trace: "ListTables(db.sn)",
 			},
