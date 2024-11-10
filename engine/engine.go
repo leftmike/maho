@@ -42,6 +42,7 @@ type Transaction interface {
 type Table interface {
 	Name() types.TableName
 	Type() *TableType
+	TableId() storage.TableId
 	// XXX
 }
 
@@ -444,4 +445,8 @@ func (tbl *table) Name() types.TableName {
 
 func (tbl *table) Type() *TableType {
 	return tbl.tt
+}
+
+func (tbl *table) TableId() storage.TableId {
+	return tbl.tid
 }

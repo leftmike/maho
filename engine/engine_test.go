@@ -333,10 +333,7 @@ func TestSchema(t *testing.T) {
 func TestTable(t *testing.T) {
 	eng := newEngine(t)
 
-	colNames1 := []types.Identifier{}
-	colTypes1 := []types.ColumnType{}
-	primary1 := []types.ColumnKey{}
-
+	colNames1, colTypes1, primary1 := testutil.MustParseColumns("c1 int, c2 char(64)")
 	testEngine(t, eng.Begin(), []interface{}{
 		createTable{
 			tn: types.TableName{
@@ -347,6 +344,131 @@ func TestTable(t *testing.T) {
 			colNames: colNames1,
 			colTypes: colTypes1,
 			primary:  primary1,
+		},
+		commit{},
+	})
+
+	colNames2, colTypes2, primary2 := testutil.MustParseColumns(
+		"c1 bool, c2 int, c3 char(16), c4 binary(128)")
+	testEngine(t, eng.Begin(), []interface{}{
+		createTable{
+			tn: types.TableName{
+				Database: types.MAHO,
+				Schema:   types.PUBLIC,
+				Table:    types.ID("test", false),
+			},
+			colNames: colNames2,
+			colTypes: colTypes2,
+			primary:  primary2,
+			fail:     true,
+		},
+		rollback{},
+	})
+
+	testEngine(t, eng.Begin(), []interface{}{
+		createTable{
+			tn: types.TableName{
+				Database: types.MAHO,
+				Schema:   types.ID("no_schema", false),
+				Table:    types.ID("test", false),
+			},
+			colNames: colNames2,
+			colTypes: colTypes2,
+			primary:  primary2,
+			fail:     true,
+		},
+		rollback{},
+	})
+
+	testEngine(t, eng.Begin(), []interface{}{
+		createTable{
+			tn: types.TableName{
+				Database: types.ID("no_schema", false),
+				Schema:   types.PUBLIC,
+				Table:    types.ID("test", false),
+			},
+			colNames: colNames2,
+			colTypes: colTypes2,
+			primary:  primary2,
+			fail:     true,
+		},
+		rollback{},
+	})
+
+	testEngine(t, eng.Begin(), []interface{}{
+		createTable{
+			tn: types.TableName{
+				Database: types.MAHO,
+				Schema:   types.PUBLIC,
+				Table:    types.ID("test2", false),
+			},
+			colNames: colNames2,
+			colTypes: colTypes2,
+			primary:  primary2,
+		},
+		rollback{},
+	})
+
+	testEngine(t, eng.Begin(), []interface{}{
+		createTable{
+			tn: types.TableName{
+				Database: types.MAHO,
+				Schema:   types.PUBLIC,
+				Table:    types.ID("test2", false),
+			},
+			colNames: colNames2,
+			colTypes: colTypes2,
+			primary:  primary2,
+		},
+		commit{},
+	})
+
+	testEngine(t, eng.Begin(), []interface{}{
+		openTable{
+			tn: types.TableName{
+				Database: types.MAHO,
+				Schema:   types.PUBLIC,
+				Table:    types.ID("test99", false),
+			},
+			fail: true,
+		},
+		rollback{},
+	})
+
+	testEngine(t, eng.Begin(), []interface{}{
+		openTable{
+			tn: types.TableName{
+				Database: types.MAHO,
+				Schema:   types.ID("not_schema", false),
+				Table:    types.ID("test", false),
+			},
+			fail: true,
+		},
+		rollback{},
+	})
+
+	testEngine(t, eng.Begin(), []interface{}{
+		openTable{
+			tn: types.TableName{
+				Database: types.MAHO,
+				Schema:   types.PUBLIC,
+				Table:    types.ID("test", false),
+			},
+			colNames: colNames1,
+			colTypes: colTypes1,
+			primary:  primary1,
+			tid:      512,
+		},
+		openTable{
+			tn: types.TableName{
+				Database: types.MAHO,
+				Schema:   types.PUBLIC,
+				Table:    types.ID("test2", false),
+			},
+			colNames: colNames2,
+			colTypes: colTypes2,
+			primary:  primary2,
+			tid:      513,
 		},
 		commit{},
 	})
@@ -450,9 +572,11 @@ func testEngine(t *testing.T, tx engine.Transaction, cases []interface{}) {
 				if !reflect.DeepEqual(tt.Key, c.primary) {
 					t.Errorf("Key(%s) got %v want %v", c.tn, tt.Key, c.primary)
 				}
-				/*
-					XXX:	tid  storage.TableId
-				*/
+
+				tid := tbl.TableId()
+				if tid != c.tid {
+					t.Errorf("TableId(%s) got %d want %d", c.tn, tid, c.tid)
+				}
 			}
 		case createTable:
 			err := tx.CreateTable(ctx, c.tn, c.colNames, c.colTypes, c.primary)
